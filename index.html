@@ -346,8 +346,8 @@ function logoutST(){
    Login unificado: loginST() tenta autenticar no Supabase com o
    e-mail derivado do usuário local + a MESMA senha digitada, ANTES
    de validar localmente — sem tela extra. */
-const SB_DEFAULT_URL = '';       // preencher após criar o projeto Supabase
-const SB_DEFAULT_ANON_KEY = '';  // preencher após criar o projeto Supabase
+const SB_DEFAULT_URL = 'https://lmqspfmxignghcrgepui.supabase.co';
+const SB_DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtcXNwZm14aWduZ2hjcmdlcHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NTEyNDYsImV4cCI6MjEwMjAyNzI0Nn0.VHS9UZWYSxNjvOv6ZLhI1h604XvpRYGe44rw8QWcOTM';
 const SB_ROW_ID = 'main';
 const SB = {client:null, busy:false, timer:null};
 function sbCfg(){
