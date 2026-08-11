@@ -880,7 +880,7 @@ function cadResumo(key){
   if(!CLIENTES.length || !CAD.cliente){
     return seletor + `<div class="hint">⚠ Selecione ou cadastre um cliente (aba <b>Clientes</b>) e preencha os dados antes de gerar laudos.</div>` + (key?equipBlock(key):'');
   }
-  const resumo=`<div class="hint">📌 Cliente: <b>${CAD.cliente}</b> · Obra: ${CAD.obra||'—'} · Temp: ${CAD.temp}°C / ${CAD.umid}% UR</div>`;
+  const resumo=`<div class="hint">📌 Cliente: <b>${CAD.cliente}</b> · Obra: ${CAD.obra||'—'}</div>`;
   return seletor + resumo + (key?equipBlock(key):'');
 }
 function trocaClienteEnsaio(key,id){
@@ -898,8 +898,11 @@ function equipBlock(key){
   const d=eqData(key);
   const instr=(d.instrumentos&&d.instrumentos.length)?d.instrumentos:[{tipo:'',cert:'',cal:'',venc:''}];
   return `<div class="card" id="eqcard_${key}">
-    <div class="grid g3" style="margin-bottom:6px">
+    <div class="grid g4" style="margin-bottom:6px">
       <div><label>Nº do Laudo / Protocolo</label><input id="eq_numlaudo" value="${CAD.numeroLaudo||''}" oninput="eqSetNum(this.value)" placeholder="ex: INNOVA-2026-001 (vazio = automático)"></div>
+      <div><label>Data do Ensaio</label><input type="date" id="eq_data" value="${CAD.data||''}" onchange="eqSetData(this.value)"></div>
+      <div><label>Temperatura Ambiente (°C)</label><input id="eq_temp" value="${CAD.temp||''}" oninput="eqSetTemp(this.value)"></div>
+      <div><label>Umidade Relativa (%)</label><input id="eq_umid" value="${CAD.umid||''}" oninput="eqSetUmid(this.value)"></div>
     </div>
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:12px;color:#65708c">🎨 Cor do tema:</span>
@@ -959,6 +962,9 @@ function eqCollect(key){
 }
 function eqSalvar(key){const d=eqCollect(key);saveEqData(key,d);const b=document.querySelector('#eqcard_'+key+' .btn-p');if(b){b.textContent='✔ Salvo!';setTimeout(()=>b.textContent='💾 Salvar equipamento/instrumentos',1000);}}
 function eqSetNum(v){CAD.numeroLaudo=v;saveCad();}
+function eqSetData(v){CAD.data=v;saveCad();}
+function eqSetTemp(v){CAD.temp=v;saveCad();}
+function eqSetUmid(v){CAD.umid=v;saveCad();}
 function eqSetTema(key,cor){const d=eqCollect(key);d.tema=cor;saveEqData(key,d);if(PAGES[key])PAGES[key]();}
 /* Imagem de diagrama/planta anexada ao ensaio (ex.: elevação do SPDA) — escalável, mesmo padrão dos gráficos do laudo */
 function eqImgPreview(data,key){
@@ -1905,11 +1911,8 @@ function renderCadForm(){
       <div><label>Obra / Empreendimento</label><input id="c_obra" value="${CAD.obra}" placeholder="UHE / CGH / Subestação"></div>
       <div><label>Local da Instalação</label><input id="c_local" value="${CAD.local}"></div>
       <div><label>Cidade / UF</label><input id="c_cidade" value="${CAD.cidade}"></div>
-      <div><label>Nº do Laudo (deixe vazio p/ automático)</label><input id="c_numeroLaudo" value="${CAD.numeroLaudo||''}" placeholder="ex: INNOVA-2026-001"></div>
-      <div><label>Data do Ensaio</label><input type="date" id="c_data" value="${CAD.data}"></div>
-      <div><label>Temperatura Ambiente (°C)</label><input id="c_temp" value="${CAD.temp}"></div>
-      <div><label>Umidade Relativa (%)</label><input id="c_umid" value="${CAD.umid}"></div>
     </div>
+    <div class="hint">ℹ️ Nº do Laudo, Data do Ensaio, Temperatura e Umidade agora são preenchidos direto em cada ensaio (dentro do formulário do ensaio, não aqui).</div>
   </div>
   <div class="card">
     <div class="hint">ℹ️ O <b>Equipamento sob ensaio</b> e os <b>Instrumentos/Padrões</b> agora são preenchidos dentro de cada ensaio (cada ensaio tem os seus). Abra o ensaio desejado para informá-los.</div>
@@ -1979,7 +1982,7 @@ function instrRow(it,i){return `<div class="grid g4" style="margin-bottom:8px">
 function collectInstr(){return [...document.querySelectorAll('.ci_tipo')].map((el,i)=>({tipo:el.value,cert:document.querySelectorAll('.ci_cert')[i].value,cal:document.querySelectorAll('.ci_cal')[i].value,venc:document.querySelectorAll('.ci_venc')[i].value}));}
 function addInstr(){go('cad');}
 function salvarCad(){
-  ['nomeCadastro','empresa','cnpjEmp','enderecoEmp','respTec','creaResp','cliente','cnpjCli','obra','local','cidade','numeroLaudo','data','temp','umid','respCli','engEmp','creaEng','cargoCli','execPor','cargoExec','rodape']
+  ['nomeCadastro','empresa','cnpjEmp','enderecoEmp','respTec','creaResp','cliente','cnpjCli','obra','local','cidade','respCli','engEmp','creaEng','cargoCli','execPor','cargoExec','rodape']
    .forEach(k=>{const el=$('#c_'+k);if(el)CAD[k]=el.value;});
   if(!CAD.nomeCadastro) CAD.nomeCadastro=CAD.cliente||'Cliente';
   saveCad();
