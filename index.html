@@ -1215,7 +1215,7 @@ function roFasesPadrao(nivel){
   return out;
 }
 function renderROhm(){
-  const s=E('rohm',{unidade:'mΩ',nivel:'media',fases:roFasesPadrao('media'),tol:'2'});
+  const s=E('rohm',{unidade:'mΩ',nivel:'media',fases:roFasesPadrao('media'),tol:''});
   if(!s.nivel)s.nivel='media';
   $('#main').innerHTML=header('Resistência Ôhmica dos Enrolamentos','Ponte / micro-ôhmetro · desbalanço entre fases','NBR 5356 / IEC 60076')+cadResumo('rohm')+`
   <div class="card">
@@ -1223,9 +1223,9 @@ function renderROhm(){
     <div class="grid g3">
       <div><label>Unidade</label><select id="ro_un">${['mΩ','Ω','μΩ'].map(u=>`<option ${s.unidade==u?'selected':''}>${u}</option>`).join('')}</select></div>
       <div><label>Nível / Nomenclatura</label><select id="ro_nivel" onchange="roReconf()">${Object.entries(RI_NIVEIS).map(([k,o])=>`<option value="${k}" ${s.nivel==k?'selected':''}>${o.lbl}</option>`).join('')}</select></div>
-      <div><label>Tolerância de Desbalanço (%)</label><input id="ro_tol" value="${s.tol}"></div>
+      <div><label>Tolerância de Desbalanço (%) — do fabricante/procedimento</label><input id="ro_tol" value="${s.tol}" placeholder="não definido"></div>
     </div>
-    <div class="hint">Limite normativo: <b>2%</b> de desbalanço entre fases (NBR 5356-1 / IEC 60076-1). Medição entre fases (ex.: ${RI_NIVEIS[s.nivel].fases.join('-')}); editável.</div>
+    <div class="hint">2% é uma referência comum de mercado, mas não é um limite normativo universal (NBR 5356-1/IEC 60076-1 não fixam esse valor para todo transformador). Informe a tolerância do fabricante, relatório de fábrica, histórico ou procedimento. Medição entre fases (ex.: ${RI_NIVEIS[s.nivel].fases.join('-')}); editável.</div>
     <div class="divider"></div>
     <div id="ro_rows">${s.fases.map((f,i)=>roRow(f,i)).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addRo()">＋ Adicionar medição</button></div>
@@ -1600,7 +1600,7 @@ function calcRT(){
   const teo = (vp&&vs)? vp/vs : null;
   const fases=[...document.querySelectorAll('.rt_n')].map((el,i)=>({n:el.value,med:document.querySelectorAll('.rt_v')[i].value})).filter(f=>num(f.med)!=null);
   let worst=0;
-  const rows=fases.map(f=>{const m=num(f.med);const dev=teo?Math.abs((m-teo)/teo*100):null;if(dev>worst)worst=dev;const ok=dev==null?'—':dev<=tol?'APROVADO':'REPROVADO';return {...f,m,dev,ok};});
+  const rows=fases.map(f=>{const m=num(f.med);const dev=teo?Math.abs((m-teo)/teo*100):null;if(dev>worst)worst=dev;const ok=dev==null?'—':tol==null?'INCONCLUSIVO':dev<=tol?'APROVADO':'REPROVADO';return {...f,m,dev,ok};});
   const status = !teo||!fases.length?'INCONCLUSIVO':tol==null?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
   saveE('rt',{vp:$('#rt_vp').value,vs:$('#rt_vs').value,tol:$('#rt_tol').value,fases:[...document.querySelectorAll('.rt_n')].map((el,i)=>({n:el.value,med:document.querySelectorAll('.rt_v')[i].value}))});
   $('#rt_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
@@ -2074,15 +2074,15 @@ function calcMotor(){
 
 /* ============ 9) MANÔMETRO ============ */
 function renderMano(){
-  const s=E('mano',{fe:'20',classe:'1',pontos:[{p:'0',cresc:'',decr:''},{p:'5',cresc:'',decr:''},{p:'10',cresc:'',decr:''},{p:'15',cresc:'',decr:''},{p:'20',cresc:'',decr:''}]});
+  const s=E('mano',{fe:'20',classe:'',pontos:[{p:'0',cresc:'',decr:''},{p:'5',cresc:'',decr:''},{p:'10',cresc:'',decr:''},{p:'15',cresc:'',decr:''},{p:'20',cresc:'',decr:''}]});
   $('#main').innerHTML=header('Calibração de Manômetro','Comparação com padrão · erro % F.E. e histerese','ISO/IEC 17025 / INMETRO')+cadResumo('mano')+`
   <div class="card">
     <h3>🧭 Parâmetros</h3>
     <div class="grid g3">
       <div><label>Fundo de Escala — F.E. (bar)</label><input id="mn_fe" value="${s.fe}"></div>
-      <div><label>Classe de Exatidão (% F.E.)</label><input id="mn_classe" value="${s.classe}" placeholder="ex: 1.0"></div>
+      <div><label>Classe de Exatidão (% F.E.) — do certificado/instrumento</label><input id="mn_classe" value="${s.classe}" placeholder="não definida"></div>
     </div>
-    <div class="hint">Erro % F.E. = (Medido − Padrão)/F.E. ×100. Histerese = |Crescente − Decrescente|. Aprovado se |erro| e histerese ≤ classe de exatidão.</div>
+    <div class="hint">Erro % F.E. = (Medido − Padrão)/F.E. ×100. Histerese = |Crescente − Decrescente|. Aprovado se |erro| e histerese ≤ classe de exatidão informada no certificado do instrumento; sem classe definida, o resultado é INCONCLUSIVO.</div>
     <div class="divider"></div>
     <table><thead><tr><th>Padrão</th><th>Medido ↑ (Crescente)</th><th>Medido ↓ (Decrescente)</th></tr></thead>
     <tbody id="mn_rows">${s.pontos.map((p,i)=>`<tr><td><input class="mn_p" data-i="${i}" value="${p.p}" style="width:90px"></td><td><input class="mn_c" data-i="${i}" value="${p.cresc}"></td><td><input class="mn_d" data-i="${i}" value="${p.decr}"></td></tr>`).join('')}</tbody></table>
@@ -2121,17 +2121,36 @@ function calcMano(){
 }
 
 /* ============ 10) TERMÔMETRO / PT-100 ============ */
+/* Tolerância por classe (IEC 60751:2022) — varia com a temperatura do próprio ponto de referência. */
+function pt100Tol(classe,t){
+  if(t==null) return null;
+  const at=Math.abs(t);
+  if(classe==='AA') return 0.10+0.0017*at;
+  if(classe==='A') return 0.15+0.002*at;
+  if(classe==='B') return 0.30+0.005*at;
+  return null;
+}
 function renderTermo(){
-  const s=E('termo',{pontosRef:'30;60;90;100',tol:'1',itens:[{tag:'PT-100 #1',leit:['','','','']},{tag:'PT-100 #2',leit:['','','','']}]});
+  const s=E('termo',{pontosRef:'30;60;90;100',classe:'',tol:'',itens:[{tag:'PT-100 #1',leit:['','','','']},{tag:'PT-100 #2',leit:['','','','']}]});
+  if(!s.pontosRef) s.pontosRef='30;60;90;100';
+  if(!Array.isArray(s.itens)) s.itens=[{tag:'PT-100 #1',leit:[]}];
   const refs=s.pontosRef.split(';');
+  const isMan=s.classe==='man';
   $('#main').innerHTML=header('Calibração de Termômetro / PT-100','Banho térmico rastreável · erro em °C','IEC 60751:2022 / ISO/IEC 17025')+cadResumo('termo')+`
   <div class="card">
     <h3>🌡️ Parâmetros</h3>
-    <div class="grid g2">
+    <div class="grid g3">
       <div><label>Pontos de Referência (°C, separados por ; )</label><input id="tm_refs" value="${s.pontosRef}" onchange="reRenderTermo()"></div>
-      <div><label>Tolerância de Erro (°C)</label><input id="tm_tol" value="${s.tol}"></div>
+      <div><label>Classe de Tolerância</label><select id="tm_classe" onchange="reRenderTermo()">
+        <option value="" ${!s.classe?'selected':''}>— selecione —</option>
+        <option value="AA" ${s.classe==='AA'?'selected':''}>IEC 60751 Classe AA — ±(0,10+0,0017·|t|) °C</option>
+        <option value="A" ${s.classe==='A'?'selected':''}>IEC 60751 Classe A — ±(0,15+0,002·|t|) °C</option>
+        <option value="B" ${s.classe==='B'?'selected':''}>IEC 60751 Classe B — ±(0,30+0,005·|t|) °C</option>
+        <option value="man" ${isMan?'selected':''}>Manual / certificado do sensor</option>
+      </select></div>
+      <div><label>Tolerância manual (°C)${isMan?'':' — só p/ "Manual"'}</label><input id="tm_tol" value="${s.tol}" ${isMan?'':'disabled placeholder="selecione Manual"'}></div>
     </div>
-    <div class="hint">Erro = |Leitura − Referência|. IEC 60751:2022: tolerância depende da classe do sensor e faixa. A tolerância de aceitação deve ser definida pela classe/especificação/certificado; o erro é Leitura − Referência.</div>
+    <div class="hint">Erro = Leitura − Referência. Nas classes AA/A/B a tolerância é calculada por ponto conforme a IEC 60751:2022 (depende da temperatura de cada ponto); sem classe/tolerância definida o resultado é INCONCLUSIVO.</div>
     <div class="divider"></div>
     <table><thead><tr><th>TAG / Item</th>${refs.map(r=>`<th>${r}°C</th>`).join('')}</tr></thead>
     <tbody id="tm_rows">${s.itens.map((it,i)=>`<tr><td><input class="tm_tag" data-i="${i}" value="${it.tag}" style="width:120px"></td>${refs.map((r,j)=>`<td><input class="tm_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
@@ -2148,42 +2167,56 @@ function collectTermo(){
   });
   return {refs,itens};
 }
-function reRenderTermo(){const{refs,itens}=collectTermo();saveE('termo',{pontosRef:$('#tm_refs').value,tol:$('#tm_tol').value,itens});renderTermo();}
-function addTermo(){const{itens}=collectTermo();itens.push({tag:'',leit:[]});saveE('termo',{pontosRef:$('#tm_refs').value,tol:$('#tm_tol').value,itens});renderTermo();}
+function reRenderTermo(){const{refs,itens}=collectTermo();saveE('termo',{pontosRef:$('#tm_refs').value,classe:$('#tm_classe')?$('#tm_classe').value:'',tol:$('#tm_tol').value,itens});renderTermo();}
+function addTermo(){const{itens}=collectTermo();itens.push({tag:'',leit:[]});saveE('termo',{pontosRef:$('#tm_refs').value,classe:$('#tm_classe')?$('#tm_classe').value:'',tol:$('#tm_tol').value,itens});renderTermo();}
 function calcTermo(){
-  const tol=num($('#tm_tol').value);const{refs,itens}=collectTermo();
-  let worst=0;const rows=itens.filter(it=>it.tag!=='').map(it=>{
-    const errs=refs.map((r,j)=>{const ref=num(r),l=num(it.leit[j]);return (ref!=null&&l!=null)?Math.abs(l-ref):null;});
-    const mx=Math.max(...errs.filter(e=>e!=null),0);if(mx>worst)worst=mx;
-    const ok=errs.some(e=>e!=null)?(errs.every(e=>e==null||e<=tol)?'APROVADO':'REPROVADO'):'—';
+  const classe=$('#tm_classe')?$('#tm_classe').value:'';
+  const tolMan=num($('#tm_tol').value);
+  const{refs,itens}=collectTermo();
+  const isClasseCalc=(classe==='AA'||classe==='A'||classe==='B');
+  const hasCrit=classe==='man'?tolMan!=null:isClasseCalc;
+  const tols=refs.map(r=>classe==='man'?tolMan:pt100Tol(classe,num(r)));
+  let worst=0;
+  const rows=itens.filter(it=>it.tag!=='').map(it=>{
+    const errs=refs.map((r,j)=>{const ref=num(r),l=num(it.leit[j]);return (ref!=null&&l!=null)?(l-ref):null;});
+    const mx=maxAbs(errs)||0;worst=Math.max(worst,mx);
+    const ok=errs.some(e=>e!=null)?(hasCrit?(errs.every((e,j)=>e==null||tols[j]==null||Math.abs(e)<=tols[j])?'APROVADO':'REPROVADO'):'INCONCLUSIVO'):'INCONCLUSIVO';
     return {tag:it.tag,leit:it.leit,errs,ok};
   });
-  const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
-  saveE('termo',{pontosRef:$('#tm_refs').value,tol:$('#tm_tol').value,itens});
+  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';
+  saveE('termo',{pontosRef:$('#tm_refs').value,classe,tol:$('#tm_tol').value,itens});
   $('#tm_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>TAG</th>${refs.map(r=>`<th>${r}°C (erro)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.tag}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)+'°'}</td>`).join('')}<td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
-    <div class="norm-box" style="margin-top:12px">Maior erro encontrado: <b style="font-size:18px">${fmt(worst,2)} °C</b> (tolerância ${tol} °C)</div>
+    <table><thead><tr><th>TAG</th>${refs.map((r,j)=>`<th>${r}°C (erro)${hasCrit&&tols[j]!=null?' · ±'+fmt(tols[j],2)+'°':''}</th>`).join('')}<th>Situação</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.tag}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)+'°'}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    <div class="norm-box" style="margin-top:12px">Maior erro absoluto: <b style="font-size:18px">${fmt(worst,2)} °C</b> ${hasCrit?'':'· critério não definido'}</div>
+    <div class="hint" style="margin-top:10px">${isClasseCalc?`Tolerância pela IEC 60751:2022, Classe ${classe} — calculada por ponto conforme a temperatura de referência.`:classe==='man'?'Tolerância manual aplicada a todos os pontos.':'Selecione uma classe (AA/A/B) ou informe a tolerância manual/certificado do sensor para avaliar conformidade.'}</div>
     <div class="chart-wrap"><canvas id="tm_chart"></canvas></div>
-    <div class="btn-row">${prepLaudoBtn("Calibração de Termômetro/PT-100","termo",{status,refs,rows,tol,worst})}</div>`;
+    <div class="btn-row">${prepLaudoBtn("Calibração de Termômetro/PT-100","termo",{status,refs,rows,classe,tol:tolMan,tols,worst})}</div>`;
   drawChart('tm_chart',{type:'line',data:{labels:refs.map(r=>r+'°C'),datasets:rows.map((r,k)=>({label:r.tag,data:r.leit.map(v=>num(v)),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2'][k%5],tension:.2})).concat([{label:'Referência',data:refs.map(r=>num(r)),borderColor:'#999',borderDash:[5,4],pointRadius:0}])},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Leitura × Referência'}}}});
 }
 
 /* ============ 11) TRANSDUTOR (LOOP TEST) ============ */
 function renderTransd(){
-  const s=E('transd',{span:'100',unidade:'bar',tol:'1',pontos:['0','25','50','75','100'],itens:[{tag:'Transd #1',leit:['','','','','']}]});
+  const s=E('transd',{span:'100',unidade:'bar',tol:'',modo:'proc',pontos:['0','25','50','75','100'],itens:[{tag:'Transd #1',leit:['','','','','']}]});
+  if(!Array.isArray(s.pontos)||!s.pontos.length) s.pontos=['0','25','50','75','100'];
+  if(!Array.isArray(s.itens)) s.itens=[{tag:'Transd #1',leit:[]}];
+  const isMa=s.modo==='ma';
   $('#main').innerHTML=header('Calibração de Transdutor','Loop test 4-20 mA · erro % do span','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('transd')+`
   <div class="card">
     <h3>📟 Parâmetros</h3>
-    <div class="grid g3">
-      <div><label>Span (faixa)</label><input id="td_span" value="${s.span}"></div>
-      <div><label>Unidade</label><input id="td_un" value="${s.unidade}"></div>
-      <div><label>Tolerância (% span)</label><input id="td_tol" value="${s.tol}"></div>
+    <div class="grid g4">
+      <div><label>Span (faixa, LRV=0 assumido)</label><input id="td_span" value="${s.span}" onchange="tdReconf()"></div>
+      <div><label>Unidade</label><input id="td_un" value="${s.unidade}" onchange="tdReconf()"></div>
+      <div><label>Tolerância (% span) — do fabricante/procedimento</label><input id="td_tol" value="${s.tol}" placeholder="não definido"></div>
+      <div><label>Entrada dos pontos</label><select id="td_modo" onchange="tdReconf()">
+        <option value="proc" ${!isMa?'selected':''}>Valor de processo (já convertido)</option>
+        <option value="ma" ${isMa?'selected':''}>Corrente medida (mA) — sistema converte</option>
+      </select></div>
     </div>
-    <div class="hint">Pontos de teste em % do span. Para transmissor 4–20 mA: Iesperada = 4 + 16·(PV−LRV)/(URV−LRV). Se o valor informado for PV, o erro é (PVmed−PVref)/span ×100. Se o valor informado for corrente, deve ser habilitado o modo corrente no procedimento.</div>
+    <div class="hint">${isMa?'Entrada em corrente: I esperada = 4 + 16·(fração do span). Erro % do span = (mA medido − I esperada)/16 ×100. Assume LRV = 0 (início de escala do transmissor).':'Pontos de teste em % do span, já em valor de processo. Erro % = (Medido − Esperado)/span ×100.'} Sem tolerância definida, o resultado é INCONCLUSIVO.</div>
     <div class="divider"></div>
-    <table><thead><tr><th>TAG</th>${s.pontos.map(p=>`<th>${p}%</th>`).join('')}</tr></thead>
-    <tbody id="td_rows">${s.itens.map((it,i)=>`<tr><td><input class="td_tag" data-i="${i}" value="${it.tag}" style="width:120px"></td>${s.pontos.map((p,j)=>`<td><input class="td_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>TAG</th>${s.pontos.map(p=>`<th>${p}%${isMa?' · I esp '+fmt(4+16*num(p)/100,2)+'mA':''}</th>`).join('')}</tr></thead>
+    <tbody id="td_rows">${s.itens.map((it,i)=>`<tr><td><input class="td_tag" data-i="${i}" value="${it.tag}" style="width:120px"></td>${s.pontos.map((p,j)=>`<td><input class="td_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}" placeholder="${isMa?'mA':''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
     <div class="row-add"><button class="btn btn-g" onclick="addTransd()">＋ Adicionar item</button></div>
     <div class="btn-row"><button class="btn btn-p" onclick="calcTransd()">⚙ Calcular</button></div>
   </div>
@@ -2194,23 +2227,32 @@ function collectTransd(){
   const itens=[...document.querySelectorAll('.td_tag')].map((el,i)=>({tag:el.value,leit:pts.map((p,j)=>document.querySelector(`.td_l[data-i="${i}"][data-j="${j}"]`).value)}));
   return {pts,itens};
 }
-function addTransd(){const{itens}=collectTransd();itens.push({tag:'',leit:[]});const s=E('transd',{});s.itens=itens;s.span=$('#td_span').value;s.unidade=$('#td_un').value;s.tol=$('#td_tol').value;saveE('transd',s);renderTransd();}
+function tdReconf(){const{pts,itens}=collectTransd();const s=E('transd',{});s.pontos=pts;s.itens=itens;s.span=$('#td_span').value;s.unidade=$('#td_un').value;s.tol=$('#td_tol').value;s.modo=$('#td_modo')?$('#td_modo').value:'proc';saveE('transd',s);renderTransd();}
+function addTransd(){const{pts,itens}=collectTransd();itens.push({tag:'',leit:[]});const s=E('transd',{});s.pontos=pts;s.itens=itens;s.span=$('#td_span').value;s.unidade=$('#td_un').value;s.tol=$('#td_tol').value;s.modo=$('#td_modo')?$('#td_modo').value:'proc';saveE('transd',s);renderTransd();}
 function calcTransd(){
-  const span=num($('#td_span').value),tol=num($('#td_tol').value),un=$('#td_un').value;const{pts,itens}=collectTransd();
+  const span=num($('#td_span').value),tol=num($('#td_tol').value),un=$('#td_un').value;
+  const modo=$('#td_modo')?$('#td_modo').value:'proc';const isMa=modo==='ma';
+  const{pts,itens}=collectTransd();
   let worst=0;const rows=itens.filter(it=>it.tag!=='').map(it=>{
-    const errs=pts.map((p,j)=>{const refPct=num(p);const ref=span*refPct/100;const med=num(it.leit[j]);return med!=null&&span!=null?pctErr(med,ref,span):null;});
+    const errs=pts.map((p,j)=>{
+      const refPct=num(p),med=num(it.leit[j]);
+      if(med==null||refPct==null) return null;
+      if(isMa){const iEsp=4+16*refPct/100;return (med-iEsp)/16*100;}
+      if(span==null) return null;
+      const ref=span*refPct/100;return pctErr(med,ref,span);
+    });
     const mx=maxAbs(errs)||0;worst=Math.max(worst,mx);const ok=errs.some(e=>e!=null)?(tol!=null&&errs.every(e=>e==null||Math.abs(e)<=tol)?'APROVADO':tol==null?'INCONCLUSIVO':'REPROVADO'):'INCONCLUSIVO';return {tag:it.tag,leit:it.leit,errs,ok};
   });
   const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';
-  const s=E('transd',{});s.itens=itens;s.span=$('#td_span').value;s.unidade=un;s.tol=$('#td_tol').value;saveE('transd',s);
+  const s=E('transd',{});s.pontos=pts;s.itens=itens;s.span=$('#td_span').value;s.unidade=un;s.tol=$('#td_tol').value;s.modo=modo;saveE('transd',s);
   $('#td_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>TAG</th>${pts.map(p=>`<th>${p}% (erro)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
+    <table><thead><tr><th>TAG</th>${pts.map(p=>`<th>${p}% (erro % span)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td>${r.tag}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,3)+'%'}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
     <div class="norm-box" style="margin-top:12px">Maior erro: <b style="font-size:18px">${fmt(worst,3)}%</b> do span · tolerância ${tol!=null?tol+'%':'não definida'}</div>
-    <div class="hint" style="margin-top:10px">Para um transmissor 4–20 mA, a saída ideal nos pontos é calculada pela relação linear 4–20 mA. O software mantém a comparação de variável de processo; para uma calibração elétrica do loop, registre também a corrente medida e compare com Iesperada = 4 + 16·fração do span.</div>
+    <div class="hint" style="margin-top:10px">${isMa?'Corrente medida convertida por I esperada = 4 + 16·fração do span (LRV=0 assumido); erro em % do span calculado a partir do desvio em mA.':'Comparação direta em valor de processo (erro/span ×100). Para calibração elétrica do loop, mude "Entrada dos pontos" para corrente (mA).'}</div>
     <div class="chart-wrap"><canvas id="td_chart"></canvas></div>
-    <div class="btn-row">${prepLaudoBtn("Calibração de Transdutor","transd",{status,pts,un,rows,tol,worst,span})}</div>`;
-  drawChart('td_chart',{type:'line',data:{labels:pts.map(p=>p+'%'),datasets:rows.map((r,k)=>({label:r.tag,data:r.leit.map(v=>num(v)),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b'][k%4],tension:.2})).concat([{label:'Ideal',data:pts.map(p=>span*num(p)/100),borderColor:'#999',borderDash:[5,4],pointRadius:0}])},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resposta do Transdutor'}}}});
+    <div class="btn-row">${prepLaudoBtn("Calibração de Transdutor","transd",{status,pts,un,rows,tol,worst,span,modo})}</div>`;
+  drawChart('td_chart',{type:'line',data:{labels:pts.map(p=>p+'%'),datasets:rows.map((r,k)=>({label:r.tag,data:r.leit.map(v=>num(v)),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b'][k%4],tension:.2})).concat([{label:isMa?'I esperada (mA)':'Ideal',data:pts.map(p=>isMa?4+16*num(p)/100:(span!=null?span*num(p)/100:null)),borderColor:'#999',borderDash:[5,4],pointRadius:0}])},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resposta do Transdutor'}}}});
 }
 
 /* ============ 12) PRESSOSTATO ============ */
@@ -2256,36 +2298,52 @@ function calcPress(){
 
 /* ============ 13) NÍVEL ============ */
 function renderNivel(){
-  const s=E('nivel',{tol:'1',pontos:['25','50','75','100'],itens:[{tag:'Nível #1',tipo:'1700 mm',leit:['','','','']}]});
+  const s=E('nivel',{tol:'',modo:'proc',pontos:['25','50','75','100'],itens:[{tag:'Nível #1',tipo:'1700 mm',leit:['','','','']}]});
+  if(!Array.isArray(s.pontos)||!s.pontos.length) s.pontos=['25','50','75','100'];
+  if(!Array.isArray(s.itens)) s.itens=[{tag:'Nível #1',tipo:'',leit:[]}];
+  const isMa=s.modo==='ma';
   $('#main').innerHTML=header('Calibração de Sensor de Nível','Loop test nos pontos de referência','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('nivel')+`
   <div class="card">
     <h3>📏 Parâmetros</h3>
-    <div class="grid g2"><div><label>Tolerância de Erro (%)</label><input id="nv_tol" value="${s.tol}"></div><div><label>Pontos (% — separados por ; )</label><input id="nv_pts" value="${s.pontos.join(';')}" onchange="reRenderNivel()"></div></div>
-    <div class="hint">Verificação do sinal em cada ponto de referência (25/50/75/100%). Erro = Medido − Esperado. Para erro relativo: |Erro|/span ×100. A tolerância deve ser definida pela exatidão do instrumento/procedimento.</div>
+    <div class="grid g3">
+      <div><label>Tolerância de Erro (% do span) — do fabricante/procedimento</label><input id="nv_tol" value="${s.tol}" placeholder="não definido"></div>
+      <div><label>Pontos (% — separados por ; )</label><input id="nv_pts" value="${s.pontos.join(';')}" onchange="reRenderNivel()"></div>
+      <div><label>Entrada dos pontos</label><select id="nv_modo" onchange="reRenderNivel()">
+        <option value="proc" ${!isMa?'selected':''}>% do span (já convertido)</option>
+        <option value="ma" ${isMa?'selected':''}>Corrente medida (mA) — sistema converte</option>
+      </select></div>
+    </div>
+    <div class="hint">${isMa?'Entrada em corrente: % medida = (mA medido − 4)/16 ×100, comparada ao ponto de referência (% do span). Para o valor físico de processo, PV = LRV + (I−4)/16×span, com o span do instrumento.':'Verificação do sinal em cada ponto de referência, já em % do span. Erro = Medido(%) − Esperado(%).'} A tolerância deve ser definida pela exatidão do instrumento/procedimento; sem ela, o resultado é INCONCLUSIVO.</div>
     <div class="divider"></div>
     <table><thead><tr><th>TAG</th><th>Tipo</th>${s.pontos.map(p=>`<th>${p}%</th>`).join('')}</tr></thead>
-    <tbody id="nv_rows">${s.itens.map((it,i)=>`<tr><td><input class="nv_tag" data-i="${i}" value="${it.tag}" style="width:100px"></td><td><input class="nv_tipo" data-i="${i}" value="${it.tipo}" style="width:90px"></td>${s.pontos.map((p,j)=>`<td><input class="nv_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody id="nv_rows">${s.itens.map((it,i)=>`<tr><td><input class="nv_tag" data-i="${i}" value="${it.tag}" style="width:100px"></td><td><input class="nv_tipo" data-i="${i}" value="${it.tipo}" style="width:90px"></td>${s.pontos.map((p,j)=>`<td><input class="nv_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}" placeholder="${isMa?'mA':'%'}"></td>`).join('')}</tr>`).join('')}</tbody></table>
     <div class="row-add"><button class="btn btn-g" onclick="addNivel()">＋ Adicionar item</button></div>
     <div class="btn-row"><button class="btn btn-p" onclick="calcNivel()">⚙ Calcular</button></div>
   </div>
   <div class="card" id="nv_out"><h3>Resultado</h3><div class="sub">Preencha e calcule.</div></div>`;
 }
 function collectNivel(){const s=E('nivel',{});const pts=$('#nv_pts').value.split(';');const itens=[...document.querySelectorAll('.nv_tag')].map((el,i)=>({tag:el.value,tipo:document.querySelectorAll('.nv_tipo')[i].value,leit:pts.map((p,j)=>document.querySelector(`.nv_l[data-i="${i}"][data-j="${j}"]`).value)}));return {pts,itens};}
-function reRenderNivel(){const{pts,itens}=collectNivel();saveE('nivel',{tol:$('#nv_tol').value,pontos:pts,itens});renderNivel();}
-function addNivel(){const{pts,itens}=collectNivel();itens.push({tag:'',tipo:'',leit:[]});saveE('nivel',{tol:$('#nv_tol').value,pontos:pts,itens});renderNivel();}
+function reRenderNivel(){const{pts,itens}=collectNivel();saveE('nivel',{tol:$('#nv_tol').value,modo:$('#nv_modo')?$('#nv_modo').value:'proc',pontos:pts,itens});renderNivel();}
+function addNivel(){const{pts,itens}=collectNivel();itens.push({tag:'',tipo:'',leit:[]});saveE('nivel',{tol:$('#nv_tol').value,modo:$('#nv_modo')?$('#nv_modo').value:'proc',pontos:pts,itens});renderNivel();}
 function calcNivel(){
-  const tol=num($('#nv_tol').value);const{pts,itens}=collectNivel();
+  const tol=num($('#nv_tol').value);const modo=$('#nv_modo')?$('#nv_modo').value:'proc';const isMa=modo==='ma';
+  const{pts,itens}=collectNivel();
   let worst=0;const rows=itens.filter(it=>it.tag!=='').map(it=>{
-    const errs=pts.map((p,j)=>{const esp=num(p),med=num(it.leit[j]);return(esp!=null&&med!=null)?med-esp:null;});
+    const errs=pts.map((p,j)=>{
+      const esp=num(p),raw=num(it.leit[j]);
+      if(esp==null||raw==null) return null;
+      const med=isMa?(raw-4)/16*100:raw;
+      return med-esp;
+    });
     const mx=maxAbs(errs)||0;worst=Math.max(worst,mx);const ok=errs.some(e=>e!=null)?(tol!=null&&errs.every(e=>e==null||Math.abs(e)<=tol)?'APROVADO':tol==null?'INCONCLUSIVO':'REPROVADO'):'INCONCLUSIVO';return {tag:it.tag,tipo:it.tipo,leit:it.leit,errs,ok};
   });
-  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';saveE('nivel',{tol:$('#nv_tol').value,pontos:pts,itens});
+  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';saveE('nivel',{tol:$('#nv_tol').value,modo,pontos:pts,itens});
   $('#nv_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>TAG</th><th>Tipo</th>${pts.map(p=>`<th>${p}% (erro)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.tipo}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
-    <div class="norm-box" style="margin-top:12px">Maior erro absoluto: <b style="font-size:18px">${fmt(worst,2)}</b> unidade de processo · tolerância ${tol!=null?tol:'não definida'}</div>
-    <div class="hint" style="margin-top:10px">Para ensaio de nível em 4–20 mA, o valor de processo deve ser obtido por PV = LRV + (I−4)/16 × span. Os pontos percentuais são referência de processo; a aceitação depende da exatidão especificada do transmissor.</div>
-    <div class="btn-row">${prepLaudoBtn("Calibração de Nível","nivel",{status,pts,rows,tol,worst})}</div>`;
+    <table><thead><tr><th>TAG</th><th>Tipo</th>${pts.map(p=>`<th>${p}% (erro % span)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.tipo}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)+'%'}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    <div class="norm-box" style="margin-top:12px">Maior erro absoluto: <b style="font-size:18px">${fmt(worst,2)}%</b> do span · tolerância ${tol!=null?tol+'%':'não definida'}</div>
+    <div class="hint" style="margin-top:10px">${isMa?'Corrente medida convertida por %medido=(mA−4)/16×100. Para valor físico de processo, use PV=LRV+(I−4)/16×span com o span do instrumento.':'Comparação direta em % do span. Para calibração elétrica do loop, mude "Entrada dos pontos" para corrente (mA).'}</div>
+    <div class="btn-row">${prepLaudoBtn("Calibração de Nível","nivel",{status,pts,rows,tol,worst,modo})}</div>`;
 }
 
 /* ============ NORMAS / CRITÉRIOS POR ENSAIO ============ */
