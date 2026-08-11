@@ -12,7 +12,16 @@
   --ok:#0d8a4f; --ok-bg:#e6f6ee; --fail:#c52b2b; --fail-bg:#fdebeb;
   --warn:#b8860b; --warn-bg:#fff7e0;
   --bg:#f4f6fb; --card:#ffffff; --line:#e2e7f2; --txt:#1a2238; --muted:#65708c;
+  --muted-bg:#eef1f8; --muted-bg2:#f5f7fc; --hint-bg:#f0f5ff; --muted-txt:#566184;
   --shadow:0 1px 3px rgba(12,26,58,.08),0 6px 24px rgba(12,26,58,.06);
+}
+body.dark-mode{
+  --blue:#4d7cf0; --blue-d:#3a63d4; --navy:#0a1120; --navy-2:#0e1830;
+  --ok:#2fbf78; --ok-bg:rgba(47,191,120,.14); --fail:#f2666a; --fail-bg:rgba(242,102,106,.14);
+  --warn:#f0b23c; --warn-bg:rgba(240,178,60,.14);
+  --bg:#0e1420; --card:#161d2e; --line:#293349; --txt:#e7ecf7; --muted:#93a0bd;
+  --muted-bg:#202a40; --muted-bg2:#1b2437; --hint-bg:rgba(77,124,240,.12); --muted-txt:#a6b2cf;
+  --shadow:0 1px 3px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.25);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI','Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
@@ -34,20 +43,20 @@ body{font-family:'Segoe UI','Plus Jakarta Sans',system-ui,sans-serif;background:
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
 .topbar h2{font-size:22px;font-weight:700}
 .topbar p{color:var(--muted);font-size:13px;margin-top:3px}
-.badge-norm{background:#eaf0ff;color:var(--blue);padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #d4e0ff}
+.badge-norm{background:var(--hint-bg);color:var(--blue);padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--line)}
 /* CARDS */
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:var(--shadow);margin-bottom:20px}
 .card h3{font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
 .card .sub{color:var(--muted);font-size:12.5px;margin-bottom:16px}
 .grid{display:grid;gap:14px}
 .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
-label{display:block;font-size:12px;font-weight:600;color:#42506e;margin-bottom:5px}
-input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;background:#fcfdff;transition:.15s}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted-txt);margin-bottom:5px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;background:var(--card);color:var(--txt);transition:.15s}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,79,216,.12)}
-input[readonly]{background:#eef1f8;color:#3a4566}
+input[readonly]{background:var(--muted-bg);color:var(--muted-txt)}
 .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border:none;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit}
 .btn-p{background:var(--blue);color:#fff}.btn-p:hover{background:var(--blue-d)}
-.btn-g{background:#eef1f8;color:#42506e}.btn-g:hover{background:#e2e7f2}
+.btn-g{background:var(--muted-bg);color:var(--muted-txt)}.btn-g:hover{background:var(--line)}
 .btn-ok{background:var(--ok);color:#fff}
 .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
 /* RESULT PILL */
@@ -55,35 +64,35 @@ input[readonly]{background:#eef1f8;color:#3a4566}
 .r-ok{background:var(--ok-bg);color:var(--ok);border:1px solid #b6e2c9}
 .r-fail{background:var(--fail-bg);color:var(--fail);border:1px solid #f3c2c2}
 .r-warn{background:var(--warn-bg);color:var(--warn);border:1px solid #f0dca0}
-.r-none{background:#eef1f8;color:var(--muted);border:1px solid var(--line)}
+.r-none{background:var(--muted-bg);color:var(--muted);border:1px solid var(--line)}
 /* TABLE */
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{background:#f5f7fc;text-align:left;padding:9px 11px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--line);color:#566184}
+th{background:var(--muted-bg2);text-align:left;padding:9px 11px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--line);color:var(--muted-txt)}
 td{padding:9px 11px;border-bottom:1px solid var(--line)}
-tr:hover td{background:#fafbff}
+tr:hover td{background:var(--muted-bg)}
 .tag{padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600}
 .tag-ok{background:var(--ok-bg);color:var(--ok)}.tag-fail{background:var(--fail-bg);color:var(--fail)}
 .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
 .kpi .k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
-.kpi .k .v{font-size:26px;font-weight:700;color:var(--navy)}
+.kpi .k .v{font-size:26px;font-weight:700;color:var(--txt)}
 .kpi .k .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.hint{background:#f0f5ff;border-left:3px solid var(--blue);padding:11px 14px;border-radius:0 8px 8px 0;font-size:12.5px;color:#3a4a6e;margin:14px 0}
+.hint{background:var(--hint-bg);border-left:3px solid var(--blue);padding:11px 14px;border-radius:0 8px 8px 0;font-size:12.5px;color:var(--muted-txt);margin:14px 0}
 .divider{height:1px;background:var(--line);margin:18px 0}
 .chart-wrap{height:300px;margin-top:10px}
 .ppc-tbl{width:auto;max-width:100%;border-collapse:collapse;table-layout:auto}
-.ppc-tbl th{background:#f5f7fc;color:#1a2238;font-size:11.5px;text-align:left;padding:8px 10px;border:1px solid var(--line);white-space:nowrap}
+.ppc-tbl th{background:var(--muted-bg2);color:var(--txt);font-size:11.5px;text-align:left;padding:8px 10px;border:1px solid var(--line);white-space:nowrap}
 .ppc-tbl td{padding:4px;border:1px solid var(--line);vertical-align:middle}
 .ppc-tbl td input{width:auto;min-width:56px;max-width:420px;field-sizing:content;padding:7px 8px;font-size:12.5px}
 .ppc-tbl td:has(.ppc-conf-btn),.ppc-tbl td:has(.ppc-conf-btn) .ppc-conf-btn{width:140px}
 .ppc-conf-btn{width:100%;padding:8px 6px;border-radius:8px;border:1px solid transparent;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
-.ppc-conf-pend{background:#eef1f7;color:#65708c;border-color:#d6deec}
-.ppc-conf-ok{background:#e6f6ee;color:#0d8a4f;border-color:#0d8a4f}
-.ppc-conf-nok{background:#fdebeb;color:#c52b2b;border-color:#c52b2b}
+.ppc-conf-pend{background:var(--muted-bg);color:var(--muted);border-color:var(--line)}
+.ppc-conf-ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.ppc-conf-nok{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
 .page{display:none}.page.active{display:block;animation:fade .3s}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .row-add{margin-top:10px}
 .muted{color:var(--muted)}
-.norm-box{background:#fafbff;border:1px dashed var(--line);border-radius:10px;padding:14px;font-size:12.5px;color:#4a5575;line-height:1.6}
+.norm-box{background:var(--muted-bg);border:1px dashed var(--line);border-radius:10px;padding:14px;font-size:12.5px;color:var(--muted-txt);line-height:1.6}
 .norm-box b{color:var(--blue)}
 .mobilebar{display:none}
 .menu-overlay{display:none}
@@ -213,6 +222,9 @@ tr:hover td{background:#fafbff}
     </nav>
     <div class="side-foot">
       <div id="sfUsuario" style="color:#dbe3f5;font-weight:700;font-size:12px;margin-bottom:2px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
+        <button id="btnTemaST" onclick="alternarTemaST()" title="Alternar tema claro/escuro (só para você)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#cfd7ec;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">🌙 Escuro</button>
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>Innova Hydro · v1.0</span>
         <button onclick="logoutST()" title="Sair" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#cfd7ec;border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">Sair</button>
@@ -296,6 +308,34 @@ function _ensureAdminSeedST(){
 let currentUser = DB.get('currentUser','');
 let currentUserNivel = DB.get('currentUserNivel','');
 function isAdminST(){ return currentUserNivel==='admin'; }
+
+/* ============ TEMA (Claro/Escuro) — por usuário ============
+   Cada pessoa escolhe seu tema uma vez; fica salvo no cadastro dela
+   (sincroniza via Supabase) e é aplicado automaticamente sempre que ela
+   logar, em qualquer computador — sem mudar o que os outros usuários
+   veem. Antes do login (tela de login em si), usa o último tema deste
+   navegador como aparência provisória. */
+function aplicarTemaST(modo){
+  document.body.classList.toggle('dark-mode', modo==='escuro');
+  try{ DB.set('tema_app', modo); }catch(e){}
+  const btn=document.getElementById('btnTemaST');
+  if(btn) btn.textContent = modo==='escuro' ? '☀️ Claro' : '🌙 Escuro';
+  // Salva no cadastro do usuário logado — não mexe na preferência de mais ninguém
+  if(currentUser){
+    const u=USUARIOS.find(x=>x.user.toLowerCase()===currentUser.toLowerCase());
+    if(u && u.tema!==modo){ u.tema=modo; saveUsuarios(); }
+  }
+}
+function alternarTemaST(){
+  const atual = document.body.classList.contains('dark-mode') ? 'escuro' : 'claro';
+  aplicarTemaST(atual==='escuro' ? 'claro' : 'escuro');
+}
+// Aplica o tema certo ao entrar: preferência do usuário logado > último tema deste navegador
+function restaurarTemaST(){
+  const u = currentUser ? USUARIOS.find(x=>x.user.toLowerCase()===currentUser.toLowerCase()) : null;
+  const modo = (u && u.tema) || DB.get('tema_app','claro');
+  aplicarTemaST(modo);
+}
 // IDs (string) dos clientes/projetos que o usuário logado pode ver nos LAUDOS, ou null
 // se não houver restrição (Administrador, ou projetosAcesso vazio = "Todos").
 function _idsClientesVisiveis(){
@@ -328,6 +368,7 @@ async function loginST(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appRoot').style.display='';
   const sfU=document.getElementById('sfUsuario'); if(sfU) sfU.textContent=(usr.nome||usr.user)+(isAdminST()?' · Admin':'');
+  restaurarTemaST(); // aplica o tema salvo desta pessoa (não o que estava no navegador)
   go('dash');
 }
 function logoutST(){
@@ -336,6 +377,7 @@ function logoutST(){
   document.getElementById('appRoot').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('lu').value=''; document.getElementById('lp').value='';
+  restaurarTemaST(); // volta pro tema deste navegador (sem usuário logado)
 }
 
 /* ============ SUPABASE — SINCRONIZAÇÃO NA NUVEM ============
@@ -592,7 +634,7 @@ function renderUsuariosListST(){
       clientesCol = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px" title="${nomes.join(', ')||'Todos'}">${resumo}</span><button class="btn btn-g" style="padding:4px 8px;font-size:11px" onclick="abrirEditarClientesUsuarioST('${u.user}')">✏️</button></div>`;
     }
     return `<tr>
-      <td style="font-weight:600">${u.nome||'—'}${isMe?' <span class="tag" style="background:#eaf0ff;color:var(--blue)">você</span>':''}</td>
+      <td style="font-weight:600">${u.nome||'—'}${isMe?' <span class="tag" style="background:var(--hint-bg);color:var(--blue)">você</span>':''}</td>
       <td>${u.user}</td>
       <td>${nivelSel}</td>
       <td>${clientesCol}</td>
@@ -787,7 +829,7 @@ function pill(status){
   if(status==='ATENÇÃO') return `<span class="result r-warn">⚠ ATENÇÃO</span>`;
   return `<span class="result r-none">— Aguardando dados</span>`;
 }
-function tag(s){return s==='APROVADO'?'<span class="tag tag-ok">Aprovado</span>':s==='REPROVADO'?'<span class="tag tag-fail">Reprovado</span>':'<span class="tag" style="background:#fff7e0;color:#b8860b">Atenção</span>';}
+function tag(s){return s==='APROVADO'?'<span class="tag tag-ok">Aprovado</span>':s==='REPROVADO'?'<span class="tag tag-fail">Reprovado</span>':'<span class="tag" style="background:var(--warn-bg);color:var(--warn)">Atenção</span>';}
 
 /* Correção de RI à 40°C (IEEE 43) — fator dobra a cada 10°C */
 /* Tipo de equipamento → temperatura de referência, critério e norma aplicável (RI) */
@@ -861,7 +903,7 @@ function equipBlock(key){
     </div>
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:12px;color:#65708c">🎨 Cor do tema:</span>
-      ${(()=>{const cur=d.tema||CAD.tema||'#1E4FD8';const nome=(TEMA_TODOS.find(x=>x[0].toLowerCase()===cur.toLowerCase())||[null,'Personalizada'])[1];return `<button onclick="eqCicloTema('${key}')" title="Clique para mudar a cor — ${nome}" style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border:1px solid #d6deec;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;color:#33405c"><span style="width:18px;height:18px;border-radius:5px;background:${cur};box-shadow:0 0 0 1px #ccc"></span>${nome} <span style="color:#9aa6bd">↻</span></button>`;})()}
+      ${(()=>{const cur=d.tema||CAD.tema||'#1E4FD8';const nome=(TEMA_TODOS.find(x=>x[0].toLowerCase()===cur.toLowerCase())||[null,'Personalizada'])[1];return `<button onclick="eqCicloTema('${key}')" title="Clique para mudar a cor — ${nome}" style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;color:var(--txt)"><span style="width:18px;height:18px;border-radius:5px;background:${cur};box-shadow:0 0 0 1px #ccc"></span>${nome} <span style="color:var(--muted)">↻</span></button>`;})()}
       <input type="color" value="${d.tema||CAD.tema||'#1E4FD8'}" onchange="eqSetTema('${key}',this.value)" title="Cor personalizada" style="width:30px;height:28px;padding:2px;border-radius:6px;border:1px solid #ccc;cursor:pointer">
     </div>
     <h3>${key==='spda'?'🏢 Edificação / Instalação':'⚙️ Equipamento Sob Ensaio'} <span style="font-weight:400;font-size:12px;color:#65708c">(${key==='spda'?'objeto deste laudo — dados exigidos pela NBR 5419':'específico deste ensaio'})</span></h3>
@@ -892,7 +934,7 @@ function equipBlock(key){
     <div id="eqinstr_${key}">${instr.map((it,i)=>eqInstrRow(it,i,key)).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="eqAddInstr('${key}')">＋ Adicionar instrumento</button></div>
     <div style="margin-top:12px"><label>📝 Observações (texto livre — aparece no laudo)</label>
-      <textarea class="eq_obs" rows="3" placeholder="Ex.: condições do ensaio, ressalvas, recomendações..." style="width:100%;padding:10px;border:1px solid #d6deec;border-radius:8px;font-family:inherit;font-size:13px;resize:vertical">${d.obs||''}</textarea></div>
+      <textarea class="eq_obs" rows="3" placeholder="Ex.: condições do ensaio, ressalvas, recomendações..." style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;background:var(--card);color:var(--txt)">${d.obs||''}</textarea></div>
     <div class="btn-row"><button class="btn btn-p" onclick="eqSalvar('${key}')">💾 Salvar equipamento/instrumentos</button></div>
   </div>`;
 }
@@ -921,7 +963,7 @@ function eqSetTema(key,cor){const d=eqCollect(key);d.tema=cor;saveEqData(key,d);
 /* Imagem de diagrama/planta anexada ao ensaio (ex.: elevação do SPDA) — escalável, mesmo padrão dos gráficos do laudo */
 function eqImgPreview(data,key){
   if(!data) return `<div class="muted" style="font-size:12px;padding:14px;border:1px dashed var(--line);border-radius:8px;text-align:center">Nenhuma imagem inserida</div>`;
-  return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff">
+  return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)">
     <img src="${data}" style="max-width:100%;max-height:220px;display:block;margin:0 auto 8px;object-fit:contain;border-radius:4px">
     <div style="text-align:center"><button class="btn btn-g" style="padding:6px 12px" onclick="eqImgRemove('${key}')">🗑 Remover imagem</button></div></div>`;
 }
@@ -1063,9 +1105,9 @@ function renderRI(){
     <div style="overflow-x:auto">
     <table><thead>
       <tr><th rowspan="2" style="vertical-align:middle">Combinação</th>${times.map(t=>`<th colspan="2" style="text-align:center">${t}</th>`).join('')}</tr>
-      <tr>${times.map(()=>`<th style="font-size:9px;text-align:center">Lido</th><th style="font-size:9px;text-align:center;background:#eef1f8">Corr. ${s.tref}°</th>`).join('')}</tr>
+      <tr>${times.map(()=>`<th style="font-size:9px;text-align:center">Lido</th><th style="font-size:9px;text-align:center;background:var(--muted-bg)">Corr. ${s.tref}°</th>`).join('')}</tr>
     </thead>
-    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px"></td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:#f5f7fc;color:#1E4FD8;font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px"></td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:var(--muted-bg2);color:var(--blue);font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`}
     <div class="btn-row"><button class="btn btn-p" onclick="calcRI()">⚙ Calcular</button></div>
   </div>
@@ -1305,7 +1347,7 @@ function calcOleo(){
   $('#ol_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>Aplicação</th><th>Ruptura (kV)</th></tr></thead><tbody>
     ${pts.map(p=>`<tr><td>${p.n}</td><td><b>${fmt(num(p.v),1)}</b></td></tr>`).join('')}
-    <tr style="background:#eef4ff"><td><b>Média</b></td><td><b>${media!=null?fmt(media,1):'—'} kV</b></td></tr>
+    <tr style="background:var(--hint-bg)"><td><b>Média</b></td><td><b>${media!=null?fmt(media,1):'—'} kV</b></td></tr>
     <tr><td>Mínimo admissível</td><td>${lim||'—'} kV</td></tr></tbody></table>
     <div class="chart-wrap"><canvas id="ol_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Rigidez Dielétrica do Óleo","oleo",{status,pontos:pts,lim,media})}</div>`;
@@ -1378,10 +1420,10 @@ function renderTA(){
     <div style="overflow-x:auto">
     <table><thead><tr><th>Fase \\ min</th>${tempos.map(t=>`<th>${t}'</th>`).join('')}</tr></thead>
     <tbody>${ordem.map((idx,pos)=>`<tr><td style="font-weight:600;white-space:nowrap"><span style="display:inline-flex;gap:2px;margin-right:6px;vertical-align:middle">
-      <button onclick="taMove(${pos},-1)" title="Mover para cima" ${pos===0?'disabled':''} style="border:none;background:#eef1f8;border-radius:4px;cursor:pointer;padding:1px 5px;font-size:11px;${pos===0?'opacity:.3':''}">▲</button>
-      <button onclick="taMove(${pos},1)" title="Mover para baixo" ${pos===ordem.length-1?'disabled':''} style="border:none;background:#eef1f8;border-radius:4px;cursor:pointer;padding:1px 5px;font-size:11px;${pos===ordem.length-1?'opacity:.3':''}">▼</button>
+      <button onclick="taMove(${pos},-1)" title="Mover para cima" ${pos===0?'disabled':''} style="border:none;background:var(--muted-bg);border-radius:4px;cursor:pointer;padding:1px 5px;font-size:11px;${pos===0?'opacity:.3':''}">▲</button>
+      <button onclick="taMove(${pos},1)" title="Mover para baixo" ${pos===ordem.length-1?'disabled':''} style="border:none;background:var(--muted-bg);border-radius:4px;cursor:pointer;padding:1px 5px;font-size:11px;${pos===ordem.length-1?'opacity:.3':''}">▼</button>
     </span>${rotulos[idx]}</td>${tempos.map(t=>`<td><input class="ta_cell" data-f="${idx}" data-t="${t}" value="${s.leituras[idx][t]||''}" style="min-width:60px"></td>`).join('')}</tr>`).join('')}</tbody>
-    <tfoot><tr><td style="font-weight:600;background:#eef1f8">Tensão (kV)</td>${tensaoPorMin.map(v=>`<td style="background:#eef1f8;text-align:center">${v!=null?fmt(v,1):'—'}</td>`).join('')}</tr></tfoot>
+    <tfoot><tr><td style="font-weight:600;background:var(--muted-bg)">Tensão (kV)</td>${tensaoPorMin.map(v=>`<td style="background:var(--muted-bg);text-align:center">${v!=null?fmt(v,1):'—'}</td>`).join('')}</tr></tfoot>
     </table>
     </div>
     <div class="btn-row"><button class="btn btn-p" onclick="calcTA()">⚙ Avaliar</button></div>
@@ -1667,7 +1709,7 @@ function calcSP(){
   const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.some(r=>r.ok==='ATENÇÃO'||r.ok==='—')?'ATENÇÃO':'APROVADO';
   saveE('spda',{classe:cl,limCont:$('#sp_limc').value,ymax:$('#sp_ymax').value,descidas:spColeta()});
   $('#sp_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    ${temDestoante?`<div class="hint" style="background:#fff7e0;border-left:3px solid #b8860b;color:#8a6d0b"><b>⚠ Atenção:</b> há ponto(s) de continuidade <b>destoante(s)</b> do conjunto (muito acima da mediana das demais descidas). Embora dentro do limite, recomenda-se verificar/corrigir essa(s) conexão(ões) — pode indicar aperto deficiente, corrosão ou emenda de maior resistência.</div>`:''}
+    ${temDestoante?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há ponto(s) de continuidade <b>destoante(s)</b> do conjunto (muito acima da mediana das demais descidas). Embora dentro do limite, recomenda-se verificar/corrigir essa(s) conexão(ões) — pode indicar aperto deficiente, corrosão ou emenda de maior resistência.</div>`:''}
     <table><thead><tr><th>Descida</th><th>Continuidade (Ω) — critério ≤${fmt(limCont,2)}</th><th>Situação</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td>${r.n}</td><td><b>${fmt(r.c,5)}</b>${r.destoante?' <span style="color:#b8860b">⚠ destoante</span>':''}</td><td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
     <div class="hint" style="margin-top:10px">Aprovação pela <b>continuidade elétrica</b> (≤ ${fmt(limCont,2)} Ω), conforme NBR 5419:2015. Pontos dentro do limite, porém muito acima da mediana das demais descidas, são marcados como <b>atenção</b> para verificação.</div>
@@ -1690,7 +1732,7 @@ function calcSP(){
     if(!av){
       const wrap=document.createElement('div');
       wrap.className='hint'; wrap.setAttribute('data-ymax-avisado','1');
-      wrap.style.cssText='margin-top:10px;background:#fff7e0;border-left:3px solid #b8860b;color:#8a6d0b';
+      wrap.style.cssText='margin-top:10px;background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)';
       wrap.innerHTML=`<b>⚠ Escala do gráfico ajustada:</b> o valor informado (${fmt(_ymaxManual,1)}%) é menor que a maior medição atual (${fmt(_maxPct,1)}% do limite ≤${fmt(limCont,2)} Ω) e cortaria a curva. Usamos automaticamente ${fmt(spYMax,1)}% — atualize o campo "Escala do gráfico" se preferir outro valor.`;
       document.getElementById('sp_charts_row').before(wrap);
     }
@@ -1797,17 +1839,17 @@ function calcPPC(){
   }
   saveE('ppc',{cabos:ppcColeta()});
   $('#ppc_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    ${status==='ATENÇÃO'?`<div class="hint" style="background:#fff7e0;border-left:3px solid #b8860b;color:#8a6d0b"><b>⚠ Atenção:</b> há cabo(s) ainda <b>pendente(s)</b> de verificação ponto a ponto.</div>`:''}
-    ${status==='REPROVADO'?`<div class="hint" style="background:#fdebeb;border-left:3px solid #c52b2b;color:#a12222"><b>✘ Reprovado:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
+    ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) ainda <b>pendente(s)</b> de verificação ponto a ponto.</div>`:''}
+    ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
     <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Nº Cabo</th><th>De</th><th>Para</th><th>Função</th><th>Formação</th><th>Comp. (m)</th><th>Situação</th></tr></thead><tbody>
-    ${cabos.map(c=>`<tr><td>${c.cabo||'—'}</td><td>${c.de||'—'}</td><td>${c.para||'—'}</td><td>${c.funcao||'—'}</td><td>${c.form?c.form+' mm²':'—'}</td><td>${c.comp||'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:#eef1f7;color:#65708c">Pendente</span>'}</td></tr>`).join('')}
+    ${cabos.map(c=>`<tr><td>${c.cabo||'—'}</td><td>${c.de||'—'}</td><td>${c.para||'—'}</td><td>${c.funcao||'—'}</td><td>${c.form?c.form+' mm²':'—'}</td><td>${c.comp||'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="btn-row">${prepLaudoBtn("Ponto a Ponto de Cabos","ppc",{status,cabos})}</div>`;
 }
 
 function renderCad(){
   // Lista de clientes cadastrados
-  const linhas = CLIENTES.length ? CLIENTES.map(c=>`<tr${c.id===CAD.id?' style="background:#eef4ff"':''}>
+  const linhas = CLIENTES.length ? CLIENTES.map(c=>`<tr${c.id===CAD.id?' style="background:var(--hint-bg)"':''}>
       <td style="font-weight:600">${c.nomeCadastro||c.cliente||'(sem nome)'}${c.id===CAD.id?' <span style="color:#1E4FD8;font-size:10px">● ativo</span>':''}</td>
       <td>${c.cliente||'—'}</td><td>${c.obra||'—'}</td><td>${c.cidade||'—'}</td>
       <td style="white-space:nowrap">
@@ -1839,7 +1881,7 @@ function excluirCliente(id){
 }
 function renderCadForm(){
   $('#main').innerHTML = header('Cadastro de Cliente','Preencha os dados — usados nos laudos deste cliente','')+`
-  <div class="card" style="background:#f0f5ff">
+  <div class="card" style="background:var(--hint-bg)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px"><label>Nome do cadastro (identificação interna)</label><input id="c_nomeCadastro" value="${CAD.nomeCadastro||''}" placeholder="ex: GBio CH4 — UTE Biometano"></div>
       <button class="btn btn-g" onclick="renderCad()" style="align-self:flex-end">← Voltar à lista</button>
@@ -1915,7 +1957,7 @@ function renderCadForm(){
 }
 function logoPreview(data,key){
   if(!data) return `<div class="muted" style="font-size:12px;padding:14px;border:1px dashed var(--line);border-radius:8px;text-align:center">Nenhum logo carregado</div>`;
-  return `<div style="display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff">
+  return `<div style="display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)">
     <img src="${data}" style="max-height:56px;max-width:160px;object-fit:contain">
     <button class="btn btn-g" style="padding:6px 12px" onclick="removeLogo('${key}')">🗑 Remover</button></div>`;
 }
@@ -2216,7 +2258,7 @@ function renderPress(){
   </div>
   <div class="card" id="ps_out"><h3>Resultado</h3><div class="sub">Preencha e calcule.</div></div>`;
 }
-function pressRow(it,i){return `<div class="card" style="margin:0 0 10px;background:#fafbff">
+function pressRow(it,i){return `<div class="card" style="margin:0 0 10px;background:var(--muted-bg)">
   <div class="grid g2"><div><label>TAG</label><input class="ps_tag" data-i="${i}" value="${it.tag}"></div><div><label>Tipo / Faixa</label><input class="ps_tipo" data-i="${i}" value="${it.tipo}"></div></div>
   <div class="grid g4" style="margin-top:8px">
     <div><label>Setpoint Alarme</label><input class="ps_spa" data-i="${i}" value="${it.spAlarme}"></div>
@@ -2886,10 +2928,10 @@ function renderNormasLista(){
       html+=`<div class="card" style="margin-bottom:10px;padding:14px 16px;border-left:4px solid ${grp.cor}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div style="font-weight:700;font-size:14px">${n.cod}</div>
-          <span class="tag" style="background:#eef1f8;color:#42506e">${n.org}</span>
+          <span class="tag" style="background:var(--muted-bg);color:var(--muted-txt)">${n.org}</span>
         </div>
-        <div style="font-size:12.5px;color:#42506e;font-weight:600;margin:3px 0 6px">${n.tit}</div>
-        <div style="font-size:12.5px;color:#566184;line-height:1.55">${n.desc}</div>
+        <div style="font-size:12.5px;color:var(--muted-txt);font-weight:600;margin:3px 0 6px">${n.tit}</div>
+        <div style="font-size:12.5px;color:var(--muted-txt);line-height:1.55">${n.desc}</div>
         <div style="margin-top:10px"><a href="${urlNormaOficial(n)}" target="_blank" rel="noopener" class="btn btn-g" style="padding:6px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">🔗 Consultar norma oficial (${orgFonte(n.org)})</a></div>
       </div>`;
     });
@@ -2979,6 +3021,7 @@ function delLaudo(id){
 /* ============ INIT ============ */
 // Não renderiza nada ainda — só prepara o IndexedDB. A tela de login fica
 // visível por padrão; loginST() chama go('dash') após autenticar.
+restaurarTemaST(); // aparência da própria tela de login (ainda sem usuário logado)
 (async()=>{ await initLaudos(); })();
 </script>
 </body>
