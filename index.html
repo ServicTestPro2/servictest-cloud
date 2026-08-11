@@ -138,7 +138,6 @@ tr:hover td{background:var(--muted-bg)}
   .login-right{padding:32px 24px}
 }
 </style>
-</head>
 <body>
 <!-- LOGIN -->
 <div id="loginScreen">
@@ -278,7 +277,7 @@ if(!CLIENTES){
   else CLIENTES=[];
   DB.set('clientes',CLIENTES);
 }
-function saveClientes(){DB.set('clientes',CLIENTES); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
+function saveClientes(){DB.set('clientes',CLIENTES);}
 // CAD = cliente ativo (em edição/uso). Mantém compatibilidade com todo o código existente.
 let CAD = CLIENTES[0] || novoClienteObj();
 (()=>{ const aid=DB.get('cadAtivoId',null); if(aid){ const c=CLIENTES.find(x=>x.id===aid); if(c) CAD=c; } })();
@@ -706,7 +705,6 @@ function salvarClientesUsuarioST(user){
   renderUsuariosListST();
   alert('Clientes atualizados.');
 }
-
 /* ===== Armazenamento de laudos em IndexedDB (capacidade muito maior que localStorage) ===== */
 let LAUDOS = [];                      // espelho em memória (mantém o código síncrono)
 const IDB={db:null};
@@ -746,20 +744,14 @@ function idbBulk(arr){
 }
 // Salva (persistência completa do array em memória, sem limite prático de espaço)
 function saveLaudos(){
-  if(!IDB.db){ try{DB.set('laudos',LAUDOS);}catch(e){} }
-  else{
-    idbBulk(LAUDOS).catch(err=>{
-      console.warn('Falha ao salvar no IndexedDB, tentando localStorage:',err);
-      try{DB.set('laudos',LAUDOS);}catch(e){ alert('Não foi possível salvar o laudo. Verifique o espaço do navegador.'); }
-    });
-  }
-  if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
+  if(!IDB.db){ try{DB.set('laudos',LAUDOS);}catch(e){} return; }
+  idbBulk(LAUDOS).catch(err=>{
+    console.warn('Falha ao salvar no IndexedDB, tentando localStorage:',err);
+    try{DB.set('laudos',LAUDOS);}catch(e){ alert('Não foi possível salvar o laudo. Verifique o espaço do navegador.'); }
+  });
 }
 // Persiste a exclusão de um laudo específico
-function persistDelLaudo(id){
-  if(IDB.db) idbDel(id).catch(()=>{}); else { try{DB.set('laudos',LAUDOS);}catch(e){} }
-  if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
-}
+function persistDelLaudo(id){ if(IDB.db) idbDel(id).catch(()=>{}); else { try{DB.set('laudos',LAUDOS);}catch(e){} } }
 // Inicializa: abre o IndexedDB, migra laudos antigos do localStorage (uma vez) e carrega
 async function initLaudos(){
   try{
@@ -831,22 +823,46 @@ function pill(status){
 }
 function tag(s){return s==='APROVADO'?'<span class="tag tag-ok">Aprovado</span>':s==='REPROVADO'?'<span class="tag tag-fail">Reprovado</span>':'<span class="tag" style="background:var(--warn-bg);color:var(--warn)">Atenção</span>';}
 
-/* Correção de RI à 40°C (IEEE 43) — fator dobra a cada 10°C */
+
+/* ============ MOTOR NORMATIVO v2 ============
+   Regra central: nenhum limite é universal por padrão. O sistema separa
+   cálculo matemático, requisito normativo/fabricante e regra de decisão.
+*/
+const NORMATIVE_VERSION='2.0';
+function statusConformidade(ok,hasCriterion=true){
+  if(!hasCriterion) return ok==null?'INCONCLUSIVO':(ok?'ATENÇÃO':'INCONCLUSIVO');
+  return ok==null?'INCONCLUSIVO':(ok?'APROVADO':'REPROVADO');
+}
+function pctErr(meas,ref,span){return meas==null||ref==null||span==null||span===0?null:(meas-ref)/span*100;}
+function maxAbs(vals){const a=vals.filter(v=>v!=null).map(Math.abs);return a.length?Math.max(...a):null;}
+function tempFactor(tempC,refC=40){if(tempC==null||refC==null)return 1;return Math.pow(2,(tempC-refC)/10);}
+function corrigeTemp(ri,tempC,ref=40){if(ri==null||tempC==null||ref==null||!isFinite(tempC)||!isFinite(ref))return ri;return ri*tempFactor(tempC,ref);}
+function currentUnbalance(a,b,c){const vals=[a,b,c].filter(v=>v!=null);if(vals.length!==3)return null;const avg=vals.reduce((x,y)=>x+y,0)/3;return avg===0?null:Math.max(...vals.map(v=>Math.abs(v-avg)))/avg*100;}
+function decisionFromTolerance(errAbs,tol){if(errAbs==null||tol==null)return 'INCONCLUSIVO';return errAbs<=tol?'APROVADO':'REPROVADO';}
+function safeCriterionText(source,limit,unit){return source?(limit!=null?`${source}: ${limit} ${unit||''}`:source):'Critério não informado — definir por norma/procedimento/fabricante.';}
+
+/* Correção de RI à 40°C (IEEE 43) — fator de temperatura parametrizado */
 /* Tipo de equipamento → temperatura de referência, critério e norma aplicável (RI) */
 const RI_TIPO_NORMA={
-  motor:{tref:'40',crit:'kvrule',norma:'IEEE 43',rotulo:'Motor elétrico'},
-  gerador:{tref:'40',crit:'kvrule',norma:'IEEE 43',rotulo:'Gerador'},
-  trafo:{tref:'20',crit:'kvrule',norma:'IEEE C57.152 / IEC 60076',rotulo:'Transformador de potência'},
-  cabo:{tref:'20',crit:'ieee5',norma:'IEC 60502 / IEEE 400',rotulo:'Cabos elétricos'},
-  barra:{tref:'20',crit:'ieee5',norma:'IEC 60502 / IEEE 400 (prática de subestação)',rotulo:'Barramentos'},
-  tc:{tref:'20',crit:'kvrule',norma:'IEC 61869 (antiga IEC 60044)',rotulo:'Transformador de corrente (TC)'},
-  tp:{tref:'20',crit:'kvrule',norma:'IEC 61869 (antiga IEC 60044)',rotulo:'Transformador de potencial (TP)'}
+  motor:{tref:'40',crit:'ieee100',norma:'IEEE 43-2013',rotulo:'Motor elétrico — selecionar classe de enrolamento'},
+  gerador:{tref:'40',crit:'ieee100',norma:'IEEE 43-2013',rotulo:'Gerador — selecionar classe de enrolamento'},
+  trafo:{tref:'20',crit:'man',norma:'IEC 60076 / procedimento do fabricante',rotulo:'Transformador de potência'},
+  cabo:{tref:'0',crit:'man',norma:'IEC 60502 / IEC 60840 / IEC 62067, conforme tipo',rotulo:'Cabo — selecionar norma e tipo'},
+  barra:{tref:'0',crit:'man',norma:'Procedimento/fabricante do barramento',rotulo:'Barramento'},
+  tc:{tref:'20',crit:'man',norma:'IEC 61869 / ABNT aplicável',rotulo:'Transformador de corrente (TC)'},
+  tp:{tref:'20',crit:'man',norma:'IEC 61869 / ABNT aplicável',rotulo:'Transformador de potencial (TP)'}
 };
-function corrigeTemp(ri,tempC,ref=40){
-  if(ri==null||tempC==null) return ri;
-  const Kt = Math.pow(2,(tempC-ref)/10);
-  return ri*Kt;
+
+
+/* ============ AUDITORIA NORMATIVA ============ */
+function normativaBanner(){
+  const el=document.querySelector('.side-foot');
+  if(el && !document.getElementById('normBanner')){
+    const d=document.createElement('div');d.id='normBanner';d.style='margin-top:8px;font-size:10px;line-height:1.35;color:#aab5d1';
+    d.innerHTML='Motor normativo v2.0 · limites específicos por equipamento/procedimento';el.appendChild(d);
+  }
 }
+setTimeout(normativaBanner,0);
 
 /* ============ ROUTER ============ */
 const PAGES = {dash:renderDash, cad:renderCad, ri:renderRI, rohm:renderROhm, rc:renderRC, ta:renderTA, rt:renderRT, atr:renderAtr, spda:renderSPDA, ppc:renderPPC, motor:renderMotor, mano:renderMano, termo:renderTermo, transd:renderTransd, press:renderPress, nivel:renderNivel, fp:renderFP, dp:renderDP, oleo:renderOleo, laudos:renderLaudos, config:renderConfig, normas:renderNormas};
@@ -905,11 +921,11 @@ function equipBlock(key){
       <div><label>Umidade Relativa (%)</label><input id="eq_umid" value="${CAD.umid||''}" oninput="eqSetUmid(this.value)"></div>
     </div>
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-size:12px;color:#65708c">🎨 Cor do tema:</span>
+      <span style="font-size:12px;color:var(--muted)">🎨 Cor do tema:</span>
       ${(()=>{const cur=d.tema||CAD.tema||'#1E4FD8';const nome=(TEMA_TODOS.find(x=>x[0].toLowerCase()===cur.toLowerCase())||[null,'Personalizada'])[1];return `<button onclick="eqCicloTema('${key}')" title="Clique para mudar a cor — ${nome}" style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;color:var(--txt)"><span style="width:18px;height:18px;border-radius:5px;background:${cur};box-shadow:0 0 0 1px #ccc"></span>${nome} <span style="color:var(--muted)">↻</span></button>`;})()}
       <input type="color" value="${d.tema||CAD.tema||'#1E4FD8'}" onchange="eqSetTema('${key}',this.value)" title="Cor personalizada" style="width:30px;height:28px;padding:2px;border-radius:6px;border:1px solid #ccc;cursor:pointer">
     </div>
-    <h3>${key==='spda'?'🏢 Edificação / Instalação':'⚙️ Equipamento Sob Ensaio'} <span style="font-weight:400;font-size:12px;color:#65708c">(${key==='spda'?'objeto deste laudo — dados exigidos pela NBR 5419':'específico deste ensaio'})</span></h3>
+    <h3>${key==='spda'?'🏢 Edificação / Instalação':'⚙️ Equipamento Sob Ensaio'} <span style="font-weight:400;font-size:12px;color:var(--muted)">(${key==='spda'?'objeto deste laudo — dados exigidos pela NBR 5419':'específico deste ensaio'})</span></h3>
     <div class="grid g3">
       ${key==='spda'?`
       <div><label>Edificação / Denominação</label><input class="eq_f" data-k="edif" value="${d.edif||''}" placeholder="Ex: Galpão Industrial, Sede Administrativa..."></div>
@@ -928,12 +944,12 @@ function equipBlock(key){
     </div>
     ${key==='spda'?`
     <div class="divider"></div>
-    <h3>🖼️ Diagrama / Planta da Edificação <span style="font-weight:400;font-size:12px;color:#65708c">(aparece no laudo, entre a análise e as assinaturas)</span></h3>
+    <h3>🖼️ Diagrama / Planta da Edificação <span style="font-weight:400;font-size:12px;color:var(--muted)">(aparece no laudo, entre a análise e as assinaturas)</span></h3>
     <input type="file" accept="image/*" onchange="eqImgUpload(event,'${key}')">
     <div id="eqimg_${key}" style="margin-top:10px">${eqImgPreview(d.imgDiagrama,key)}</div>
     `:''}
     <div class="divider"></div>
-    <h3>🔧 Instrumentos / Padrões <span style="font-weight:400;font-size:12px;color:#65708c">(deste ensaio)</span></h3>
+    <h3>🔧 Instrumentos / Padrões <span style="font-weight:400;font-size:12px;color:var(--muted)">(deste ensaio)</span></h3>
     <div id="eqinstr_${key}">${instr.map((it,i)=>eqInstrRow(it,i,key)).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="eqAddInstr('${key}')">＋ Adicionar instrumento</button></div>
     <div style="margin-top:12px"><label>📝 Observações (texto livre — aparece no laudo)</label>
@@ -969,7 +985,7 @@ function eqSetTema(key,cor){const d=eqCollect(key);d.tema=cor;saveEqData(key,d);
 /* Imagem de diagrama/planta anexada ao ensaio (ex.: elevação do SPDA) — escalável, mesmo padrão dos gráficos do laudo */
 function eqImgPreview(data,key){
   if(!data) return `<div class="muted" style="font-size:12px;padding:14px;border:1px dashed var(--line);border-radius:8px;text-align:center">Nenhuma imagem inserida</div>`;
-  return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)">
+  return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff">
     <img src="${data}" style="max-width:100%;max-height:220px;display:block;margin:0 auto 8px;object-fit:contain;border-radius:4px">
     <div style="text-align:center"><button class="btn btn-g" style="padding:6px 12px" onclick="eqImgRemove('${key}')">🗑 Remover imagem</button></div></div>`;
 }
@@ -1034,16 +1050,16 @@ function riCombos(nivel,modoMassa,modoFF){
 }
 function riLeituraVazia(dur){return RI_DUR[dur].times.reduce((o,t)=>(o[t]='',o),{});}
 function riMinValor(crit,kv,manVal){
-  if(crit==='kvrule') return kv!=null ? (1+kv) : null;
+  if(crit==='kvrule') return kv!=null ? (1+kv) : null; // IEEE 43: somente para classes em que kV+1 é aplicável
   if(crit==='ieee5') return 5;
   if(crit==='ieee100') return 100;
   return num(manVal);
 }
 function riCritTxt(crit,kv){
-  if(crit==='kvrule') return kv!=null?`≥ ${fmt(1+kv,0)} MΩ — regra 1 MΩ/kV (kV+1)`:'1 MΩ/kV (informe a tensão nominal)';
-  if(crit==='ieee5') return '≥ 5 MΩ (referência IEEE 43:2013)';
-  if(crit==='ieee100') return '≥ 100 MΩ (referência IEEE 43:2013)';
-  return 'valor manual / datasheet';
+  if(crit==='kvrule') return kv!=null?`≥ ${fmt(1+kv,1)} MΩ — IEEE 43-2013, kV+1 (somente quando aplicável ao enrolamento)`:'IEEE 43-2013: kV+1 MΩ — informe tensão nominal e confirme aplicabilidade';
+  if(crit==='ieee5') return '≥ 5 MΩ — IEEE 43-2013, para máquinas/estatores nos casos previstos na norma';
+  if(crit==='ieee100') return '≥ 100 MΩ — IEEE 43-2013, para enrolamentos AC form-wound nos casos previstos na norma';
+  return 'Critério manual / fabricante / procedimento específico';
 }
 function renderRI(){
   const def={tensao:'5000',dur:'pi',temp:CAD.temp,tref:'0',tipoEq:'',tensaoNom:CAD.tensaoNom||'',crit:'kvrule',
@@ -1082,9 +1098,9 @@ function renderRI(){
       <div><label>Tensão Nominal (kV)</label><input id="ri_kv" value="${s.tensaoNom}" placeholder="ex: 13.8" oninput="updRiMin()"></div>
       <div><label>Critério Normativo de Mínimo</label>
         <select id="ri_crit" onchange="updRiMin()">
-          <option value="kvrule" ${s.crit=='kvrule'?'selected':''}>Regra 1 MΩ/kV (kV+1)</option>
-          <option value="ieee100" ${s.crit=='ieee100'?'selected':''}>IEEE 43:2013 — 100 MΩ</option>
-          <option value="ieee5" ${s.crit=='ieee5'?'selected':''}>IEEE 43:2013 — 5 MΩ</option>
+          <option value="kvrule" ${s.crit=='kvrule'?'selected':''}>IEEE 43 — kV+1 (quando aplicável)</option>
+          <option value="ieee100" ${s.crit=='ieee100'?'selected':''}>IEEE 43 — 100 MΩ (form-wound aplicável)</option>
+          <option value="ieee5" ${s.crit=='ieee5'?'selected':''}>IEEE 43 — 5 MΩ (casos previstos)</option>
           <option value="man" ${s.crit=='man'?'selected':''}>Manual / Datasheet</option>
         </select>
       </div>
@@ -1098,7 +1114,7 @@ function renderRI(){
         </div>
       </div>
     </div>
-    <div class="hint" id="ri_crithint">${riCritTxt(s.crit,kvNom)}. PI = R10min/R1min (≥2) · DAR = R60s/R30s (≥1,25), calculados por fase. ${s.tref==='0'||s.tref==0?'Sem correção de temperatura (valores medidos).':'Correção para '+s.tref+'°C (IEEE 43).'}</div>
+    <div class="hint" id="ri_crithint">${riCritTxt(s.crit,kvNom)}. PI = R10min/R1min; DAR = R60s/R30s. Os limites de PI/DAR devem ser definidos pela classe/procedimento aplicável. ${s.tref==='0'||s.tref==0?'Sem correção de temperatura (valores medidos).':'Correção para '+s.tref+'°C (IEEE 43).'}</div>
     <div class="divider"></div>
     <h3>📈 Leituras (MΩ) — uma linha por combinação</h3>
     ${s.tref==='0'||s.tref==0
@@ -1151,52 +1167,46 @@ function riTipoPreset(tipo){
 function updRiMin(){
   const crit=$('#ri_crit').value, kv=num($('#ri_kv').value), fld=$('#ri_min'), hint=$('#ri_crithint');
   if(crit==='man'){fld.readOnly=false;} else {fld.readOnly=true; const v=riMinValor(crit,kv,null); fld.value=v!=null?fmt(v,0):'';}
-  if(hint){const tr=$('#ri_tref').value; hint.innerHTML = riCritTxt(crit,kv)+`. PI = R10min/R1min (≥2) · DAR = R60s/R30s (≥1,25), por fase. ${tr==='0'||tr==0?'Sem correção de temperatura (valores medidos).':'Correção para '+tr+'°C (IEEE 43).'}`;}
+  if(hint){const tr=$('#ri_tref').value; hint.innerHTML = riCritTxt(crit,kv)+`. PI = R10min/R1min; DAR = R60s/R30s. Critérios dependem da classe/procedimento aplicável. ${tr==='0'||tr==0?'Sem correção de temperatura (valores medidos).':'Correção para '+tr+'°C (IEEE 43).'}`;}
 }
 function calcRI(){
   const temp=num($('#ri_temp').value), tref=num($('#ri_tref').value), dur=$('#ri_dur').value;
   const min=num($('#ri_min').value), kvNom=num($('#ri_kv').value), crit=$('#ri_crit').value, tensao=$('#ri_tensao').value;
   riSalvaEstado(); const leituras=riColeta(); const combos=window._riCombos||[];
-  // preenche as subcolunas "Corr." de cada leitura (corrigida para a temp. de referência)
-  combos.forEach((c,i)=>{ Object.keys(leituras[c]).forEach(t=>{
+  const semCorr=(tref==null||tref===0);
+  combos.forEach((c,i)=>Object.keys(leituras[c]).forEach(t=>{
     const cell=document.querySelector(`.ri_corr[data-c="${i}"][data-t="${t}"]`);
-    if(cell){ const v=num(leituras[c][t]); const cv=corrigeTemp(v,temp,tref); cell.textContent = cv!=null?fmt(cv,0):'—'; }
-  }); });
-  const semCorr = (tref===0 || tref==='0' || !tref);
-  const linhas=combos.map(c=>{
-    const L=leituras[c]; const g=t=>num(L[t]);
-    const r30=g('30s'),r60=g('60s'),r10=g('10min');
-    const PI=(r10&&r60)?r10/r60:null, DAR=(r60&&r30)?r60/r30:null;
-    const base=r10||r60||g('15min');                    // valor medido de referência
-    const ricorr = semCorr ? base : corrigeTemp(base,temp,tref);   // corrigido (ou medido se sem correção)
-    const refVal = ricorr;                              // valor usado na avaliação do mínimo
-    const sPI=PI==null?'—':PI>=2?'APROVADO':PI>=1?'ATENÇÃO':'REPROVADO';
-    const sDAR=DAR==null?'—':DAR>=1.25?'APROVADO':DAR>=1.1?'ATENÇÃO':'REPROVADO';
-    const sMin=min&&refVal!=null?(refVal>=min?'APROVADO':'REPROVADO'):'—';
-    const arr=[sPI,sDAR,sMin].filter(x=>x!=='—');
-    const st=arr.includes('REPROVADO')?'REPROVADO':arr.includes('ATENÇÃO')?'ATENÇÃO':arr.length?'APROVADO':'—';
-    return {c,PI,DAR,medido:base,ricorr,sPI,sDAR,sMin,st};
-  }).filter(x=>x.PI!=null||x.DAR!=null||x.ricorr!=null);
-  const sts=linhas.map(l=>l.st).filter(x=>x!=='—');
-  const status=sts.includes('REPROVADO')?'REPROVADO':sts.includes('ATENÇÃO')?'ATENÇÃO':sts.length?'APROVADO':'—';
-  const critTxt=riCritTxt(crit,kvNom);
-  const colCorr = semCorr ? '' : `<th>RI corr. ${tref}°C</th>`;
-  const timesArr=RI_DUR[dur].times;
-  // matriz de leituras por combinação: medido e corrigido por tempo
-  const leiturasMatriz=combos.map(c=>({
-    c,
-    vals:timesArr.map(t=>{const v=num(leituras[c][t]); return {t,medido:v,corr: semCorr?v:corrigeTemp(v,temp,tref)};})
+    if(cell){const v=num(leituras[c][t]);const cv=semCorr?v:corrigeTemp(v,temp,tref);cell.textContent=cv!=null?fmt(cv,2):'—';}
   }));
+  const linhas=combos.map(c=>{
+    const L=leituras[c],g=t=>num(L[t]);
+    const r30=g('30s'),r60=g('60s'),r10=g('10min');
+    const PI=(r10!=null&&r60!=null&&r60!==0)?r10/r60:null;
+    const DAR=(r60!=null&&r30!=null&&r30!==0)?r60/r30:null;
+    // A resistência mínima SEMPRE é comparada com R1min, nunca R10min.
+    const r1corr=semCorr?r60:corrigeTemp(r60,temp,tref);
+    const sMin=min!=null&&r1corr!=null?(r1corr>=min?'APROVADO':'REPROVADO'):'INCONCLUSIVO';
+    // PI é razão e não precisa de correção de temperatura quando os tempos têm a mesma temperatura.
+    const piMin=(crit==='man'?null:(($('#ri_tipoEq').value==='motor'||$('#ri_tipoEq').value==='gerador')?2:null));
+    const sPI=PI==null?'INCONCLUSIVO':piMin==null?'INFORMATIVO':PI>=piMin?'APROVADO':'REPROVADO';
+    const sDAR=DAR==null?'INCONCLUSIVO':'INFORMATIVO';
+    const arr=[sMin,sPI].filter(x=>x==='APROVADO'||x==='REPROVADO');
+    const st=arr.includes('REPROVADO')?'REPROVADO':arr.length?'APROVADO':'INCONCLUSIVO';
+    return {c,PI,DAR,r1:r60,medido:r60,ricorr:r1corr,sPI,sDAR,sMin,st};
+  }).filter(x=>x.r1!=null||x.PI!=null||x.DAR!=null);
+  const sts=linhas.map(l=>l.st);const status=!linhas.length?'INCONCLUSIVO':sts.includes('REPROVADO')?'REPROVADO':sts.every(x=>x==='APROVADO')?'APROVADO':'INCONCLUSIVO';
+  const critTxt=riCritTxt(crit,kvNom);const timesArr=RI_DUR[dur].times;
+  const leiturasMatriz=combos.map(c=>({c,vals:timesArr.map(t=>{const v=num(leituras[c][t]);return {t,medido:v,corr:semCorr?v:corrigeTemp(v,temp,tref)};})}));
+  const colCorr=semCorr?'':`<th>RI corr. ${tref}°C</th>`;
   $('#ri_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Combinação</th><th>PI</th><th>DAR</th><th>RI medido</th>${colCorr}<th>Situação</th></tr></thead><tbody>
-    ${linhas.map(l=>`<tr><td style="font-weight:600">${l.c}</td><td>${fmt(l.PI)}</td><td>${fmt(l.DAR)}</td><td>${fmt(l.medido)} MΩ</td>${semCorr?'':`<td style="color:#1E4FD8;font-weight:600">${fmt(l.ricorr)} MΩ</td>`}<td>${l.st==='—'?'—':tag(l.st)}</td></tr>`).join('')}
+    <div style="overflow-x:auto"><table><thead><tr><th>Combinação</th><th>PI</th><th>DAR</th><th>R1 medido</th>${colCorr}<th>IR mínima</th><th>Situação</th></tr></thead><tbody>
+    ${linhas.map(l=>`<tr><td style="font-weight:600">${l.c}</td><td>${fmt(l.PI)}</td><td>${fmt(l.DAR)}</td><td>${fmt(l.medido)} MΩ</td>${semCorr?'':`<td style="color:#1E4FD8;font-weight:600">${fmt(l.ricorr)} MΩ</td>`}<td>${min!=null?fmt(min,1)+' MΩ':'Não definido'}</td><td>${l.st==='—'?'—':tag(l.st)}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="hint" style="margin-top:12px">Critério: ${critTxt} · PI≥2 · DAR≥1,25. ${semCorr?'Valores medidos (sem correção de temperatura).':'Valores corrigidos para '+tref+'°C (IEEE 43); a avaliação do mínimo usa o valor corrigido.'} A aprovação geral considera o pior caso entre as fases.</div>
+    <div class="hint" style="margin-top:12px">${critTxt}. A comparação de IR utiliza <b>R1min</b> corrigida à temperatura de referência quando aplicável. PI = R10/R1; DAR = R60/R30. PI só é usado como critério automático para máquina rotativa quando o procedimento/classe o justificar; DAR é informativo nesta versão.</div>
     <div class="chart-wrap"><canvas id="ri_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Resistência de Isolamento","ri",{status,tref,semCorr,tipoEq:($('#ri_tipoEq')?$('#ri_tipoEq').value:''),tensao,temp,min,kvNom,crit,critTxt,times:timesArr,leiturasMatriz,linhas:linhas.map(l=>({c:l.c,PI:l.PI,DAR:l.DAR,medido:l.medido,ricorr:l.ricorr,st:l.st}))})}</div>`;
-  // gráfico: curva por combinação ao longo do tempo
-  const times=RI_DUR[dur].times; const cores=['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'];
-  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:c,data:times.map(t=>num(leituras[c][t])),borderColor:cores[k%cores.length],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Absorção Dielétrica por Fase'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
+  const times=timesArr;
+  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:c,data:times.map(t=>num(leituras[c][t])),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'][k%6],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Resistência de Isolamento'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
 }
 
 function roFasesPadrao(nivel){
@@ -1230,17 +1240,15 @@ function calcRO(){
   const un=$('#ro_un').value,tol=num($('#ro_tol').value);
   const fases=[...document.querySelectorAll('.ro_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.ro_v')[i].value}));
   const vals=fases.map(f=>num(f.v)).filter(v=>v!=null);
-  const max=Math.max(...vals),min=Math.min(...vals),avg=vals.reduce((a,b)=>a+b,0)/vals.length;
-  const desb = vals.length>=2? ((max-min)/avg*100):null;
-  const status = desb==null?'—':desb<=tol?'APROVADO':desb<=tol*1.5?'ATENÇÃO':'REPROVADO';
+  const max=vals.length?Math.max(...vals):null,min=vals.length?Math.min(...vals):null,avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  const desb=vals.length>=2&&avg!==0?(max-min)/avg*100:null;
+  const hasTol=tol!=null&&tol>0;
+  const status=desb==null?'INCONCLUSIVO':hasTol?(desb<=tol?'APROVADO':'REPROVADO'):'INCONCLUSIVO';
   saveE('rohm',{unidade:un,fases,tol:$('#ro_tol').value,nivel:$('#ro_nivel').value});
   $('#ro_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>Fase</th><th>Resistência (${un})</th></tr></thead><tbody>${fases.filter(f=>num(f.v)!=null).map(f=>`<tr><td>${f.n}</td><td><b>${fmt(num(f.v),4)}</b></td></tr>`).join('')}</tbody></table>
-    <div class="grid g3" style="margin-top:14px">
-      <div class="norm-box">Média<br><b style="font-size:18px">${fmt(avg,4)} ${un}</b></div>
-      <div class="norm-box">Máx − Mín<br><b style="font-size:18px">${fmt(max-min,4)} ${un}</b></div>
-      <div class="norm-box">Desbalanço<br><b style="font-size:18px">${fmt(desb)} %</b> (lim. ${tol}%)</div>
-    </div>
+    <div class="grid g3" style="margin-top:14px"><div class="norm-box">Média<br><b style="font-size:18px">${fmt(avg,4)} ${un}</b></div><div class="norm-box">Máx − Mín<br><b style="font-size:18px">${fmt(max!=null&&min!=null?max-min:null,4)} ${un}</b></div><div class="norm-box">Desbalanço<br><b style="font-size:18px">${fmt(desb)} %</b> ${hasTol?'(critério '+tol+'%)':'(critério não definido)'}</div></div>
+    <div class="hint" style="margin-top:10px">A fórmula de dispersão é <b>(Rmáx−Rmín)/Rméd ×100</b>. O limite não é universal: deve ser definido pelo fabricante, relatório de fábrica, histórico ou procedimento normativo específico. A versão anterior não trata 2% como requisito universal.</div>
     <div class="chart-wrap"><canvas id="ro_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Resistência Ôhmica","rohm",{status,fases:fases.filter(f=>num(f.v)!=null),un,desb,tol,avg})}</div>`;
   drawChart('ro_chart',{type:'bar',data:{labels:fases.filter(f=>num(f.v)!=null).map(f=>f.n),datasets:[{label:'Resistência ('+un+')',data:fases.map(f=>num(f.v)).filter(v=>v!=null),backgroundColor:'#1E4FD8'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resistência por Fase'}}}});
@@ -1248,12 +1256,12 @@ function calcRO(){
 
 /* ---------- 3) RESISTÊNCIA DE CONTATO ---------- */
 function renderRC(){
-  const s=E('rc',{lim:'50',pontos:[{n:'Polo A',v:''},{n:'Polo B',v:''},{n:'Polo C',v:''}]});
+  const s=E('rc',{lim:'',pontos:[{n:'Polo A',v:''},{n:'Polo B',v:''},{n:'Polo C',v:''}]});
   $('#main').innerHTML=header('Resistência de Contato','Micro-ôhmetro (DLRO) · contatos de disjuntores/seccionadoras','NBR IEC 62271')+cadResumo('rc')+`
   <div class="card">
     <h3>🔗 Medições (μΩ)</h3>
     <div class="grid g2"><div><label>Limite Máximo (μΩ) — datasheet/fabricante</label><input id="rc_lim" value="${s.lim}" placeholder="ex: 50"></div></div>
-    <div class="hint">Referência típica preenchida: <b>50 µΩ</b> (ajuste ao valor do fabricante/datasheet do equipamento). NBR IEC 62271 — medição em CC ≥100 A.</div>
+    <div class="hint">O limite deve ser informado a partir do fabricante/datasheet, relatório de fábrica, histórico ou procedimento de ensaio. O valor medido não recebe um limite universal de 50 µΩ.</div>
     <div class="divider"></div>
     <div id="rc_rows">${s.pontos.map((p,i)=>`<div class="grid g2" style="margin-bottom:8px"><div><label>Identificação</label><input class="rc_n" data-i="${i}" value="${p.n}"></div><div><label>Resistência (μΩ)</label><input class="rc_v" data-i="${i}" value="${p.v}"></div></div>`).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addRC()">＋ Adicionar ponto</button></div>
@@ -1265,12 +1273,12 @@ function addRC(){const p=[...document.querySelectorAll('.rc_n')].map((el,i)=>({n
 
 /* ---------- Fator de Potência / Tangente Delta ---------- */
 function renderFP(){
-  const s=E('fp',{lim:'0.5',pontos:[{n:'C1 (AT-massa)',v:'',cap:''},{n:'C2 (BT-massa)',v:'',cap:''}]});
+  const s=E('fp',{lim:'',pontos:[{n:'C1 (AT-massa)',v:'',cap:''},{n:'C2 (BT-massa)',v:'',cap:''}]});
   $('#main').innerHTML=header('Fator de Potência / Tangente Delta','Ponte de capacitância · isolação de transformadores, buchas e cabos','IEEE C57.152 / IEC 60137')+cadResumo('fp')+`
   <div class="card">
     <h3>⚡ Medições</h3>
     <div class="grid g2"><div><label>Limite Máximo de Tan δ (%)</label><input id="fp_lim" value="${s.lim}" placeholder="ex: 0,5"></div></div>
-    <div class="hint">Tan δ (%) = fator de dissipação da isolação, referido a 20 °C. Limite típico ≤ 0,5% a 1% conforme o equipamento e o histórico. IEEE C57.152.</div>
+    <div class="hint">Tan δ (%) = fator de dissipação da isolação, referido a 20 °C. O limite de Tan δ deve ser definido pelo fabricante, norma/procedimento específico e/ou histórico do equipamento. Não usar 0,5% como limite universal.</div>
     <div class="divider"></div>
     <div id="fp_rows">${s.pontos.map((p,i)=>`<div class="grid g3" style="margin-bottom:8px"><div><label>Identificação</label><input class="fp_n" data-i="${i}" value="${p.n}"></div><div><label>Tan δ (%)</label><input class="fp_v" data-i="${i}" value="${p.v}"></div><div><label>Capacitância (pF) — opcional</label><input class="fp_cap" data-i="${i}" value="${p.cap||''}"></div></div>`).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addFP()">＋ Adicionar ponto</button></div>
@@ -1281,27 +1289,26 @@ function renderFP(){
 function fpColeta(){return [...document.querySelectorAll('.fp_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.fp_v')[i].value,cap:document.querySelectorAll('.fp_cap')[i].value}));}
 function addFP(){const p=fpColeta();p.push({n:'',v:'',cap:''});saveE('fp',{lim:$('#fp_lim').value,pontos:p});renderFP();}
 function calcFP(){
-  const lim=num($('#fp_lim').value);
-  const pts=fpColeta().filter(p=>num(p.v)!=null);
-  let status='—';
-  if(lim&&pts.length){status=pts.every(p=>num(p.v)<=lim)?'APROVADO':pts.some(p=>num(p.v)<=lim*1.2)?'ATENÇÃO':'REPROVADO';}
+  const lim=num($('#fp_lim').value);const pts=fpColeta().filter(p=>num(p.v)!=null);const hasLim=lim!=null&&lim>0;
+  const status=!pts.length?'INCONCLUSIVO':!hasLim?'INCONCLUSIVO':pts.every(p=>num(p.v)<=lim)?'APROVADO':'REPROVADO';
   saveE('fp',{lim:$('#fp_lim').value,pontos:fpColeta()});
   $('#fp_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>Ponto</th><th>Tan δ (%)</th><th>Capacitância (pF)</th><th>Limite (%)</th><th>Situação</th></tr></thead><tbody>
-    ${pts.map(p=>{const ok=lim?(num(p.v)<=lim?'APROVADO':num(p.v)<=lim*1.2?'ATENÇÃO':'REPROVADO'):'—';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),3)}</b></td><td>${p.cap?fmt(num(p.cap),0):'—'}</td><td>${lim||'—'}</td><td>${ok==='—'?'—':tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    ${pts.map(p=>{const ok=hasLim?(num(p.v)<=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),3)}</b></td><td>${p.cap?fmt(num(p.cap),0):'—'}</td><td>${hasLim?fmt(lim,3):'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <div class="hint" style="margin-top:10px">Tan δ é um indicador diagnóstico. O limite de aceitação não é universal; deve ser associado ao equipamento, tensão/frequência de ensaio, temperatura, fabricante, histórico e procedimento aplicável.</div>
     <div class="chart-wrap"><canvas id="fp_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Fator de Potência / Tangente Delta","fp",{status,pontos:pts,lim})}</div>`;
-  drawChart('fp_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Tan δ (%)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>lim&&num(p.v)>lim?'#c52b2b':'#0891b2'),borderRadius:6},lim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Fator de Potência (Tan δ) x Limite'}}}});
+  drawChart('fp_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Tan δ (%)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>hasLim&&num(p.v)>lim?'#c52b2b':'#0891b2')},hasLim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Fator de Potência (Tan δ)'}}}});
 }
 
 /* ---------- Descargas Parciais ---------- */
 function renderDP(){
-  const s=E('dp',{lim:'500',tensao:'',pontos:[{n:'Fase A',v:''},{n:'Fase B',v:''},{n:'Fase C',v:''}]});
+  const s=E('dp',{lim:'',tensao:'',pontos:[{n:'Fase A',v:''},{n:'Fase B',v:''},{n:'Fase C',v:''}]});
   $('#main').innerHTML=header('Descargas Parciais','Medição em pC sob tensão aplicada','IEC 60270')+cadResumo('dp')+`
   <div class="card">
     <h3>📡 Medições (pC)</h3>
     <div class="grid g2"><div><label>Limite Máximo (pC)</label><input id="dp_lim" value="${s.lim}" placeholder="ex: 500"></div><div><label>Tensão de ensaio (kV)</label><input id="dp_tensao" value="${s.tensao||''}" placeholder="ex: 1,2 × Un"></div></div>
-    <div class="hint">Nível de descarga parcial em picocoulombs (pC) sob a tensão aplicada. Aprovado quando ≤ limite especificado para o equipamento. IEC 60270.</div>
+    <div class="hint">Nível de descarga parcial em picocoulombs (pC) sob a tensão aplicada. IEC 60270 define o método de medição; o limite de aceitação deve ser definido pelo equipamento/procedimento/fabricante. Não usar 500 pC como limite universal.</div>
     <div class="divider"></div>
     <div id="dp_rows">${s.pontos.map((p,i)=>`<div class="grid g2" style="margin-bottom:8px"><div><label>Identificação</label><input class="dp_n" data-i="${i}" value="${p.n}"></div><div><label>Descarga (pC)</label><input class="dp_v" data-i="${i}" value="${p.v}"></div></div>`).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addDP()">＋ Adicionar ponto</button></div>
@@ -1312,27 +1319,26 @@ function renderDP(){
 function dpColeta(){return [...document.querySelectorAll('.dp_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.dp_v')[i].value}));}
 function addDP(){const p=dpColeta();p.push({n:'',v:''});saveE('dp',{lim:$('#dp_lim').value,tensao:$('#dp_tensao').value,pontos:p});renderDP();}
 function calcDP(){
-  const lim=num($('#dp_lim').value), tensao=$('#dp_tensao').value;
-  const pts=dpColeta().filter(p=>num(p.v)!=null);
-  let status='—';
-  if(lim&&pts.length){status=pts.every(p=>num(p.v)<=lim)?'APROVADO':pts.some(p=>num(p.v)<=lim*1.2)?'ATENÇÃO':'REPROVADO';}
+  const lim=num($('#dp_lim').value),tensao=$('#dp_tensao').value,pts=dpColeta().filter(p=>num(p.v)!=null);const hasLim=lim!=null&&lim>0;
+  const status=!pts.length?'INCONCLUSIVO':!hasLim?'INCONCLUSIVO':pts.every(p=>num(p.v)<=lim)?'APROVADO':'REPROVADO';
   saveE('dp',{lim:$('#dp_lim').value,tensao,pontos:dpColeta()});
   $('#dp_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>Ponto</th><th>Descarga (pC)</th><th>Limite (pC)</th><th>Situação</th></tr></thead><tbody>
-    ${pts.map(p=>{const ok=lim?(num(p.v)<=lim?'APROVADO':num(p.v)<=lim*1.2?'ATENÇÃO':'REPROVADO'):'—';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),0)}</b></td><td>${lim||'—'}</td><td>${ok==='—'?'—':tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <table><thead><tr><th>Ponto</th><th>Descarga (pC)</th><th>Limite</th><th>Situação</th></tr></thead><tbody>
+    ${pts.map(p=>{const ok=hasLim?(num(p.v)<=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),2)}</b></td><td>${hasLim?fmt(lim,2)+' pC':'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <div class="hint" style="margin-top:10px">A IEC 60270 estabelece o método de medição/calibração de descargas parciais. O limite em pC deve vir do equipamento, ensaio específico, fabricante ou procedimento aplicável.</div>
     <div class="chart-wrap"><canvas id="dp_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Descargas Parciais","dp",{status,pontos:pts,lim,tensao})}</div>`;
-  drawChart('dp_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Descarga (pC)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>lim&&num(p.v)>lim?'#c52b2b':'#9333ea'),borderRadius:6},lim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Descargas Parciais x Limite'}}}});
+  drawChart('dp_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'DP (pC)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>hasLim&&num(p.v)>lim?'#c52b2b':'#7b3ff2')},hasLim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Descargas Parciais'}}}});
 }
 
 /* ---------- Rigidez Dielétrica do Óleo ---------- */
 function renderOleo(){
-  const s=E('oleo',{lim:'30',pontos:[{n:'1ª aplicação',v:''},{n:'2ª aplicação',v:''},{n:'3ª aplicação',v:''},{n:'4ª aplicação',v:''},{n:'5ª aplicação',v:''}]});
+  const s=E('oleo',{lim:'',pontos:[{n:'1ª aplicação',v:''},{n:'2ª aplicação',v:''},{n:'3ª aplicação',v:''},{n:'4ª aplicação',v:''},{n:'5ª aplicação',v:''}]});
   $('#main').innerHTML=header('Rigidez Dielétrica do Óleo','Tensão de ruptura do óleo isolante (kV)','IEC 60156 / NBR 10576')+cadResumo('oleo')+`
   <div class="card">
     <h3>🛢️ Medições (kV)</h3>
     <div class="grid g2"><div><label>Mínimo admissível (kV)</label><input id="ol_lim" value="${s.lim}" placeholder="ex: 30"></div></div>
-    <div class="hint">Tensão de ruptura medida em conjunto de eletrodos padronizado; calcula-se a <b>média</b> das aplicações. Aprovado quando a média ≥ mínimo da classe de tensão. IEC 60156.</div>
+    <div class="hint">Tensão de ruptura medida em conjunto de eletrodos padronizado; calcula-se a <b>média</b> das aplicações. A IEC 60156 define o método de ensaio; o critério de aceitação deve ser definido pelo tipo de líquido, condição do equipamento e norma/procedimento aplicável. A média é informada como resultado estatístico, não como critério universal.</div>
     <div class="divider"></div>
     <div id="ol_rows">${s.pontos.map((p,i)=>`<div class="grid g2" style="margin-bottom:8px"><div><label>Aplicação</label><input class="ol_n" data-i="${i}" value="${p.n}"></div><div><label>Ruptura (kV)</label><input class="ol_v" data-i="${i}" value="${p.v}"></div></div>`).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addOleo()">＋ Adicionar aplicação</button></div>
@@ -1343,34 +1349,31 @@ function renderOleo(){
 function olColeta(){return [...document.querySelectorAll('.ol_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.ol_v')[i].value}));}
 function addOleo(){const p=olColeta();p.push({n:'',v:''});saveE('oleo',{lim:$('#ol_lim').value,pontos:p});renderOleo();}
 function calcOleo(){
-  const lim=num($('#ol_lim').value);
-  const pts=olColeta().filter(p=>num(p.v)!=null);
-  const vals=pts.map(p=>num(p.v));
-  const media=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
-  let status='—';
-  if(lim&&media!=null){status=media>=lim?'APROVADO':media>=lim*0.9?'ATENÇÃO':'REPROVADO';}
+  const lim=num($('#ol_lim').value);const pts=olColeta().filter(p=>num(p.v)!=null);const vals=pts.map(p=>num(p.v));const media=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;const hasLim=lim!=null&&lim>0;
+  const status=!pts.length?'INCONCLUSIVO':!hasLim?'INCONCLUSIVO':vals.every(v=>v>=lim)?'APROVADO':'REPROVADO';
   saveE('oleo',{lim:$('#ol_lim').value,pontos:olColeta()});
   $('#ol_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>Aplicação</th><th>Ruptura (kV)</th></tr></thead><tbody>
-    ${pts.map(p=>`<tr><td>${p.n}</td><td><b>${fmt(num(p.v),1)}</b></td></tr>`).join('')}
-    <tr style="background:var(--hint-bg)"><td><b>Média</b></td><td><b>${media!=null?fmt(media,1):'—'} kV</b></td></tr>
-    <tr><td>Mínimo admissível</td><td>${lim||'—'} kV</td></tr></tbody></table>
+    <table><thead><tr><th>Aplicação</th><th>Ruptura (kV)</th><th>Critério</th><th>Situação</th></tr></thead><tbody>
+    ${pts.map(p=>{const ok=hasLim?(num(p.v)>=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),1)}</b></td><td>${hasLim?fmt(lim,1)+' kV':'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}
+    <tr style="background:var(--hint-bg)"><td><b>Média (informativa)</b></td><td><b>${media!=null?fmt(media,1):'—'} kV</b></td><td colspan="2">${hasLim?'Não substitui a verificação individual dos valores.':'Critério não definido'}</td></tr></tbody></table>
+    <div class="hint" style="margin-top:10px">IEC 60156:2025 especifica o método de determinação da tensão de ruptura dielétrica em frequência de potência. O software preserva cada ruptura individual e não usa somente a média para aprovar o ensaio.</div>
     <div class="chart-wrap"><canvas id="ol_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Rigidez Dielétrica do Óleo","oleo",{status,pontos:pts,lim,media})}</div>`;
-  drawChart('ol_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Ruptura (kV)',data:vals,backgroundColor:vals.map(v=>lim&&v<lim?'#c52b2b':'#65a30d'),borderRadius:6},lim?{type:'line',label:'Mínimo',data:vals.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Rigidez Dielétrica x Mínimo'}}}});
+  drawChart('ol_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Ruptura (kV)',data:vals,backgroundColor:vals.map(v=>hasLim&&v<lim?'#c52b2b':'#65a30d')},hasLim?{type:'line',label:'Limite',data:vals.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Rigidez Dielétrica do Óleo'}}}});
 }
 function calcRC(){
   const lim=num($('#rc_lim').value);
   const pts=[...document.querySelectorAll('.rc_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.rc_v')[i].value})).filter(p=>num(p.v)!=null);
-  let status='—';
-  if(lim&&pts.length){status=pts.every(p=>num(p.v)<=lim)?'APROVADO':pts.some(p=>num(p.v)<=lim*1.1)?'ATENÇÃO':'REPROVADO';}
+  const hasLim=lim!=null&&lim>0;
+  const status=!pts.length?'INCONCLUSIVO':!hasLim?'INCONCLUSIVO':pts.every(p=>num(p.v)<=lim)?'APROVADO':'REPROVADO';
   saveE('rc',{lim:$('#rc_lim').value,pontos:[...document.querySelectorAll('.rc_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.rc_v')[i].value}))});
   $('#rc_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>Ponto</th><th>Medido (μΩ)</th><th>Limite (μΩ)</th><th>Situação</th></tr></thead><tbody>
-    ${pts.map(p=>{const ok=lim?(num(p.v)<=lim?'APROVADO':num(p.v)<=lim*1.1?'ATENÇÃO':'REPROVADO'):'—';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),1)}</b></td><td>${lim||'—'}</td><td>${ok==='—'?'—':tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <table><thead><tr><th>Ponto</th><th>Medido (μΩ)</th><th>Limite</th><th>Situação</th></tr></thead><tbody>
+    ${pts.map(p=>{const ok=hasLim?(num(p.v)<=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v),2)}</b></td><td>${hasLim?fmt(lim,2)+' μΩ':'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <div class="hint" style="margin-top:10px">A medição por micro-ohmímetro é matemática/diagnóstica. O critério de aceitação deve ser vinculado ao equipamento e ao procedimento aplicável; não existe limite universal de 50 µΩ para todos os contatos.</div>
     <div class="chart-wrap"><canvas id="rc_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Resistência de Contato","rc",{status,pontos:pts,lim})}</div>`;
-  drawChart('rc_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Medido (μΩ)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>lim&&num(p.v)>lim?'#c52b2b':'#0d8a4f')},lim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resistência de Contato x Limite'}}}});
+  drawChart('rc_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Medido (μΩ)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>hasLim&&num(p.v)>lim?'#c52b2b':'#0d8a4f')},hasLim?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resistência de Contato'}}}});
 }
 
 /* ---------- 4) TENSÃO APLICADA (HI-POT) — por fase e por minuto ---------- */
@@ -1420,7 +1423,7 @@ function renderTA(){
       <div><label>Suportou sem disrupção?</label><select id="ta_sup"><option value="sim" ${s.suportou=='sim'?'selected':''}>Sim</option><option value="nao" ${s.suportou=='nao'?'selected':''}>Não</option></select></div>
       <div><label>Limite máx. corrente de fuga (${un})</label><input id="ta_lim" value="${s.limite||''}" oninput="taSalva()" placeholder="ex: ${un==='µA'?'1000':'5'}"></div>
     </div>
-    <div class="hint">A tensão sobe progressivamente, em incrementos iguais por minuto, até atingir <b>${vAlvo!=null?fmt(vAlvo,1)+' kV':'(defina a tensão)'}</b> no último minuto (${num(s.durMin)||10} min)${vAlvo!=null&&nPts?` — cerca de ${fmt(vAlvo/nPts,2)} kV/min`:''}. Registre a <b>corrente de fuga (${un}) por fase a cada minuto</b>. Reprovado se a corrente ultrapassar o limite admissível ou houver disrupção/arco; aprovado se permanecer dentro do limite e estável.</div>
+    <div class="hint">A tensão deve seguir a sequência prescrita pelo procedimento/norma aplicável; o software registra os pontos informados e não impõe uma rampa normativa universal. Tensão-alvo: <b>${vAlvo!=null?fmt(vAlvo,1)+' kV':'(defina a tensão)'}</b> no último minuto (${num(s.durMin)||10} min)${vAlvo!=null&&nPts?` — cerca de ${fmt(vAlvo/nPts,2)} kV/min`:''}. Registre a <b>corrente de fuga (${un}) por fase a cada minuto</b>. Reprovado se a corrente ultrapassar o limite admissível ou houver disrupção/arco; aprovado se permanecer dentro do limite e estável.</div>
     <div class="divider"></div>
     <h3>📈 Corrente de Fuga (${un}) por minuto</h3>
     <div style="overflow-x:auto">
@@ -1465,13 +1468,13 @@ function calcTA(){
   taSalva(); const leituras=taColeta(); const tempos=window._taTempos||[];
   const fases=taRotuloSet(nomen,nivel,window._taN||0);
   const sEstado=E('ta',{}); const ordem=(Array.isArray(sEstado.ordem)&&sEstado.ordem.length===fases.length)?sEstado.ordem:fases.map((_,i)=>i);
-  // tensão sobe progressivamente até o valor de prova no último minuto (incremento igual)
+  // referência gráfica apenas; a tensão real do ensaio deve seguir a sequência do procedimento/norma
   const nptsT=tempos.length;
-  const tensaoRampa=tempos.map((t,i)=> v? +(v*((i+1)/nptsT)).toFixed(2) : null);
+  const tensaoRampa=tempos.map((t,i)=> v? +(v*((i+1)/nptsT)).toFixed(2) : null); // apenas referência gráfica; a sequência real deve ser a do procedimento
   // limite admissível de corrente de fuga (na unidade escolhida). Se não informado,
-  // usa referência de sanidade: 5 mA ou 5000 µA.
+  // sem limite informado: não inventar 5 mA/5000 µA; registrar como critério não definido.
   const limiteUser=num($('#ta_lim')?$('#ta_lim').value:'');
-  const LIMITE = (limiteUser!=null && limiteUser>0) ? limiteUser : (un==='µA'?5000:5);
+  const LIMITE = (limiteUser!=null && limiteUser>0) ? limiteUser : null;
   // limiar de instabilidade/disrupção: salto abrupto muito acima do comportamento normal
   // análise por fase conforme NBR 5356-3 / IEC 60076-3:
   // REPROVADO se a corrente ultrapassar o limite admissível OU houver colapso/disrupção.
@@ -1486,20 +1489,20 @@ function calcTA(){
     const i1=validos.length?validos[0]:null;
     const cresceu=(i1!=null&&ifim!=null&&i1>0)?(ifim/i1):null;
     // detecção de disrupção: corrente acima do limite admissível
-    const excedeLimite = (imax!=null && imax>LIMITE);
+    const excedeLimite = LIMITE!=null && imax!=null && imax>LIMITE;
     // detecção de pico anômalo (breakdown): um valor desproporcional ao restante
     let picoAnomalo=false;
     if(validos.length>=3){
       const ordenados=[...validos].sort((a,b)=>a-b);
       const mediana=ordenados[Math.floor(ordenados.length/2)];
-      if(mediana>0 && imax!=null && imax>=10*mediana && imax>LIMITE) picoAnomalo=true;
+      if(mediana>0 && imax!=null && imax>=10*mediana && (LIMITE==null || imax>LIMITE)) picoAnomalo=true;
     }
     const houveDisrupcao = excedeLimite || picoAnomalo;
     let st='APROVADO';
     if(houveDisrupcao){ st='REPROVADO'; disrupcaoFases.push(f); }
     else if(validos.length){
       // dentro do limite: atenção se já próximo do limite (≥70%) e ainda crescendo
-      const proximoLimite = (imax!=null && imax>=0.7*LIMITE);
+      const proximoLimite = LIMITE!=null && imax!=null && imax>=0.7*LIMITE;
       const crescendo = (cresceu!=null && cresceu>1.5);
       st = (proximoLimite && crescendo) ? 'ATENÇÃO' : 'APROVADO';
     } else { st='—'; }
@@ -1509,7 +1512,7 @@ function calcTA(){
   const disrupcaoAuto = disrupcaoFases.length>0;
   const houveDisrupcaoTotal = (sup==='nao') || disrupcaoAuto;
   const sts=linhas.map(l=>l.st).filter(x=>x!=='—');
-  const status = houveDisrupcaoTotal ? 'REPROVADO' : (sts.includes('ATENÇÃO')?'ATENÇÃO':(sts.length?'APROVADO':'—'));
+  const status = houveDisrupcaoTotal ? 'REPROVADO' : (sts.includes('ATENÇÃO')?'ATENÇÃO':(LIMITE==null?'INCONCLUSIVO':(sts.length?'APROVADO':'INCONCLUSIVO')));
   const disrupTxt = disrupcaoAuto
     ? `<span style="color:#c52b2b;font-weight:700">SIM</span> — corrente excedeu o limite admissível na(s) fase(s): <b>${disrupcaoFases.join(', ')}</b>`
     : (sup==='nao' ? `<span style="color:#c52b2b;font-weight:700">SIM</span> (informado pelo operador)` : 'Não houve');
@@ -1520,10 +1523,10 @@ function calcTA(){
     <table style="margin-top:6px"><tbody>
     <tr><td style="width:38%">Tensão de prova</td><td><b>${fmt(v)} kV</b> (rampa progressiva até o valor pleno)</td></tr>
     <tr><td>Duração</td><td><b>${fmt(durMin,0)} min</b></td></tr>
-    <tr><td>Limite de corrente de fuga</td><td><b>${fmt(LIMITE)} ${un}</b>${limiteUser?'':' (referência padrão — defina o limite da norma/equipamento)'}</td></tr>
+    <tr><td>Limite de corrente de fuga</td><td><b>${LIMITE!=null?fmt(LIMITE)+' '+un:'Não definido'}</b></td></tr>
     <tr><td>Disrupção / arco</td><td>${disrupTxt}</td></tr>
     </tbody></table>
-    <div class="hint" style="margin-top:10px">Critério (NBR 5356-3 / IEC 60076-3): aprovado quando não há disrupção, arco ou descarga e a corrente de fuga permanece dentro do limite admissível. <b>Reprovado</b> quando a corrente ultrapassa o limite (${fmt(LIMITE)} ${un}) ou ocorre colapso/pico anômalo — caracterizando disrupção. A elevação da corrente acompanhando a rampa de tensão é normal; atenção quando a corrente se aproxima do limite (≥70%) e mantém crescimento.</div>
+    <div class="hint" style="margin-top:10px">Critério: ausência de disrupção/arco e atendimento aos requisitos do procedimento aplicável. ${LIMITE!=null?`O limite informado é ${fmt(LIMITE)} ${un}.`:'Sem limite de corrente informado, o resultado é INCONCLUSIVO para conformidade numérica.'} A corrente pode aumentar com a tensão; isso, isoladamente, não define reprovação.</div>
     <div class="chart-wrap"><canvas id="ta_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Tensão Aplicada","ta",{status,v,durMin,sup,un,limite:LIMITE,disrupFases:disrupcaoFases,nivel:$('#ta_nivel').value,tempos,linhas:linhas.map(l=>({f:l.f,vals:l.vals,ifim:l.ifim,imax:l.imax,cresceu:l.cresceu,st:l.st,excedeLimite:l.excedeLimite}))})}</div>`;
   // ---- Construção do gráfico com tratamento de disrupção ----
@@ -1575,7 +1578,7 @@ function calcTA(){
 
 /* ---------- 5) RELAÇÃO DE TRANSFORMAÇÃO (TTR) ---------- */
 function renderRT(){
-  const s=E('rt',{vp:'',vs:'',tol:'0.5',fases:[{n:'H1-H2 / X1-X2',med:''},{n:'H2-H3 / X2-X3',med:''},{n:'H3-H1 / X3-X1',med:''}]});
+  const s=E('rt',{vp:'',vs:'',tol:'',fases:[{n:'H1-H2 / X1-X2',med:''},{n:'H2-H3 / X2-X3',med:''},{n:'H3-H1 / X3-X1',med:''}]});
   $('#main').innerHTML=header('Relação de Transformação (TTR)','Comparação relação medida × teórica · desvio ≤0,5%','NBR 5356 / IEC 60076-1')+cadResumo('rt')+`
   <div class="card">
     <h3>🔄 Relação Teórica</h3>
@@ -1584,7 +1587,7 @@ function renderRT(){
       <div><label>Tensão Secundário (V)</label><input id="rt_vs" value="${s.vs}"></div>
       <div><label>Tolerância de Desvio (%)</label><input id="rt_tol" value="${s.tol}"></div>
     </div>
-    <div class="hint">Limite normativo preenchido: desvio máximo <b>0,5%</b> entre relação medida e teórica (NBR 5356-1 / IEC 60076-1).</div>
+    <div class="hint">A relação teórica é Vp/Vs. O limite de desvio deve ser informado conforme especificação do transformador, TAP, fabricante e procedimento aplicável; 0,5% não é usado como limite universal.</div>
     <div class="divider"></div>
     <h3>Relações Medidas por Fase</h3>
     <div id="rt_rows">${s.fases.map((f,i)=>`<div class="grid g2" style="margin-bottom:8px"><div><label>Fase</label><input class="rt_n" data-i="${i}" value="${f.n}"></div><div><label>Relação medida (TTR)</label><input class="rt_v" data-i="${i}" value="${f.med}"></div></div>`).join('')}</div>
@@ -1598,7 +1601,7 @@ function calcRT(){
   const fases=[...document.querySelectorAll('.rt_n')].map((el,i)=>({n:el.value,med:document.querySelectorAll('.rt_v')[i].value})).filter(f=>num(f.med)!=null);
   let worst=0;
   const rows=fases.map(f=>{const m=num(f.med);const dev=teo?Math.abs((m-teo)/teo*100):null;if(dev>worst)worst=dev;const ok=dev==null?'—':dev<=tol?'APROVADO':'REPROVADO';return {...f,m,dev,ok};});
-  const status = !teo||!fases.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
+  const status = !teo||!fases.length?'INCONCLUSIVO':tol==null?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
   saveE('rt',{vp:$('#rt_vp').value,vs:$('#rt_vs').value,tol:$('#rt_tol').value,fases:[...document.querySelectorAll('.rt_n')].map((el,i)=>({n:el.value,med:document.querySelectorAll('.rt_v')[i].value}))});
   $('#rt_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <div class="norm-box">Relação teórica (Vp/Vs): <b style="font-size:16px">${fmt(teo,4)}</b></div>
@@ -1611,7 +1614,7 @@ function calcRT(){
 
 /* ---------- 6) ATERRAMENTO ---------- */
 function renderAtr(){
-  const s=E('atr',{tipo:'malha',lim:'10',pontos:[{n:'Haste 1',v:''},{n:'Haste 2',v:''}],metodo:'Queda de potencial (62%)'});
+  const s=E('atr',{tipo:'malha',lim:'',pontos:[{n:'Haste 1',v:''},{n:'Haste 2',v:''}],metodo:'Queda de potencial (62%)'});
   $('#main').innerHTML=header('Resistência de Aterramento','Terrômetro · método queda de potencial','NBR 5419 / NBR 15749')+cadResumo('atr')+`
   <div class="card">
     <h3>⏚ Parâmetros</h3>
@@ -1620,7 +1623,7 @@ function renderAtr(){
       <div><label>Limite Máximo (Ω)</label><input id="at_lim" value="${s.lim}"></div>
       <div><label>Método</label><input id="at_met" value="${s.metodo}"></div>
     </div>
-    <div class="hint">Referência: ≤10 Ω (geral) · ≤5 Ω (subestações/eletrônica sensível) · SPDA conforme NBR 5419.</div>
+    <div class="hint">A resistência de aterramento não possui limite universal de 10 Ω/5 Ω. O critério deve ser definido pelo projeto, tipo de instalação, NBR 15749/NBR 15751/ABNT aplicável, fabricante e/ou estudo de segurança. Para malhas de subestações, considerar também passo/toque e elevação de potencial quando aplicável.</div>
     <div class="divider"></div>
     <div id="at_rows">${s.pontos.map((p,i)=>`<div class="grid g2" style="margin-bottom:8px"><div><label>Ponto</label><input class="at_n" data-i="${i}" value="${p.n}"></div><div><label>Resistência (Ω)</label><input class="at_v" data-i="${i}" value="${p.v}"></div></div>`).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addAt()">＋ Adicionar ponto</button></div>
@@ -1632,26 +1635,27 @@ function addAt(){const p=[...document.querySelectorAll('.at_n')].map((el,i)=>({n
 function calcAt(){
   const tipo=$('#at_tipo').value,lim=num($('#at_lim').value),met=$('#at_met').value;
   const pts=[...document.querySelectorAll('.at_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.at_v')[i].value})).filter(p=>num(p.v)!=null);
-  const status=!pts.length?'—':pts.every(p=>num(p.v)<=lim)?'APROVADO':pts.some(p=>num(p.v)<=lim*1.1)?'ATENÇÃO':'REPROVADO';
+  const status=!pts.length?'INCONCLUSIVO':lim==null?'INCONCLUSIVO':pts.every(p=>num(p.v)<=lim)?'APROVADO':'REPROVADO';
   saveE('atr',{tipo,lim:$('#at_lim').value,metodo:met,pontos:[...document.querySelectorAll('.at_n')].map((el,i)=>({n:el.value,v:document.querySelectorAll('.at_v')[i].value}))});
   $('#at_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    <table><thead><tr><th>Ponto</th><th>Medido (Ω)</th><th>Limite (Ω)</th><th>Situação</th></tr></thead><tbody>
-    ${pts.map(p=>{const ok=num(p.v)<=lim?'APROVADO':num(p.v)<=lim*1.1?'ATENÇÃO':'REPROVADO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v))}</b></td><td>${lim}</td><td>${tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <table><thead><tr><th>Ponto</th><th>Medido (Ω)</th><th>Critério</th><th>Situação</th></tr></thead><tbody>
+    ${pts.map(p=>{const ok=lim!=null?(num(p.v)<=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(num(p.v))}</b></td><td>${lim!=null?fmt(lim,3)+' Ω':'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}</tbody></table>
+    <div class="hint" style="margin-top:10px">Método: ${met}. A fórmula física de resistência é R=V/I quando a medição é obtida por queda de potencial. O limite deve ser específico da instalação; não é permitido ao software inventar 10 Ω ou 5 Ω.</div>
     <div class="chart-wrap"><canvas id="at_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Aterramento","atr",{status,pontos:pts,lim,tipo,met})}</div>`;
-  drawChart('at_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Resistência (Ω)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>num(p.v)>lim?'#c52b2b':'#0d8a4f')},{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Aterramento x Limite'}}}});
+  drawChart('at_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Resistência (Ω)',data:pts.map(p=>num(p.v)),backgroundColor:pts.map(p=>lim!=null&&num(p.v)>lim?'#c52b2b':'#0d8a4f')},lim!=null?{type:'line',label:'Limite',data:pts.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Aterramento'}}}});
 }
 
 /* ---------- 7) SPDA ---------- */
 function renderSPDA(){
-  const s=E('spda',{classe:'III',limCont:'1.0',descidas:[{n:'Descida 1',cont:'',unC:'ohm'},{n:'Descida 2',cont:'',unC:'ohm'}]});
-  if(!s.limCont)s.limCont='1.0';
-  $('#main').innerHTML=header('SPDA — Sistema de Proteção contra Descargas','Continuidade dos condutores (ensaio principal NBR 5419:2015)','NBR 5419')+cadResumo('spda')+`
+  const s=E('spda',{classe:'III',limCont:'',norma:'2026',descidas:[{n:'Descida 1',cont:'',unC:'ohm'},{n:'Descida 2',cont:'',unC:'ohm'}]});
+  if(s.norma==null)s.norma='2026';
+  $('#main').innerHTML=header('SPDA — Sistema de Proteção contra Descargas','Continuidade e inspeção — NBR 5419:2026 / transição quando aplicável','NBR 5419:2026')+cadResumo('spda')+`
   <div class="card">
     <h3>🗲 Parâmetros</h3>
     <div class="grid g2">
-      <div><label>Nível de Proteção (Classe)</label><select id="sp_cl" onchange="atualizarHintSP()">${['I','II','III','IV'].map(c=>`<option ${s.classe==c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div><label>Limite Continuidade (Ω) — critério</label><input id="sp_limc" value="${s.limCont}" placeholder="1,0" oninput="atualizarHintSP()"></div>
+      <div><label>Nível de Proteção (NP)</label><select id="sp_cl" onchange="atualizarHintSP()">${['I','II','III','IV'].map(c=>`<option ${s.classe==c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div><label>Limite de continuidade (Ω) — somente se definido pelo procedimento</label><input id="sp_limc" value="${s.limCont||''}" placeholder="não definido" oninput="atualizarHintSP()"></div>
     </div>
     <div class="grid g2" style="margin-top:8px">
       <div><label>Escala do gráfico de perfil (% máx.) — opcional</label><input id="sp_ymax" value="${s.ymax||''}" placeholder="Automático"></div>
@@ -1667,11 +1671,8 @@ function renderSPDA(){
   atualizarHintSP();
 }
 function atualizarHintSP(){
-  const el=$('#sp_hint'); if(!el) return;
-  const cl=$('#sp_cl')?$('#sp_cl').value:'III';
-  const lim=num($('#sp_limc')?$('#sp_limc').value:null);
-  const limTxt=lim!=null?fmt(lim,2):'1,00';
-  el.innerHTML=`Conforme a <b>NBR 5419:2015</b>, o ensaio principal do SPDA é a <b>continuidade elétrica</b> das conexões/descidas — critério de aprovação ≤ ${limTxt} Ω (Nível de Proteção Classe ${cl}). Deixe a escala em branco para ajuste automático, ou informe um valor (ex.: 5) para "zoom" quando os pontos estiverem muito próximos de zero.`;
+  const el=$('#sp_hint'); if(!el)return; const cl=$('#sp_cl')?$('#sp_cl').value:'III'; const lim=num($('#sp_limc')?$('#sp_limc').value:null);
+  el.innerHTML=`<b>ABNT NBR 5419:2026:</b> registre a continuidade e a condição das conexões/condutores conforme o procedimento aplicável. <b>Não existe limite universal de 1 Ω no software.</b> Se o procedimento do cliente/fabricante estabelecer um limite, informe-o. Nível de Proteção: NP ${cl}. A resistência do sistema de aterramento não deve ser usada isoladamente como critério de aprovação do SPDA.`;
 }
 function spRow(d,i){const uc=d.unC||'ohm';const opts=(sel)=>['ohm','kohm','mohm'].map(u=>`<option value="${u}" ${sel===u?'selected':''}>${u==='ohm'?'Ω':u==='kohm'?'kΩ':'mΩ'}</option>`).join('');
   return `<div class="grid g2" style="margin-bottom:8px"><div><label>Identificação</label><input class="sp_n" data-i="${i}" value="${d.n}"></div>
@@ -1680,14 +1681,14 @@ function spFatorUn(u){return u==='kohm'?1000:u==='mohm'?0.001:1;}
 function spColeta(){return [...document.querySelectorAll('.sp_n')].map((el,i)=>({n:el.value,cont:document.querySelectorAll('.sp_c')[i].value,unC:document.querySelectorAll('.sp_uc')[i].value}));}
 function addSp(){const d=spColeta();d.push({n:'',cont:'',unC:'ohm'});saveE('spda',{classe:$('#sp_cl').value,limCont:$('#sp_limc').value,ymax:$('#sp_ymax').value,descidas:d});renderSPDA();}
 function calcSP(){
-  const cl=$('#sp_cl').value,limCont=num($('#sp_limc').value)||1.0;
+  const cl=$('#sp_cl').value,limCont=num($('#sp_limc').value);
   const ds=spColeta().filter(d=>d.n).map(d=>{
     const c=num(d.cont);
     return {n:d.n, unC:d.unC||'ohm',
       cont: c!=null? c*spFatorUn(d.unC||'ohm') : null,   // convertido para Ω
       contOrig:d.cont};
   });
-  // Critério NBR 5419:2015 — aprovação pela CONTINUIDADE. Aterramento é referência (não reprova).
+  // Critério NBR 5419:2026 — aprovação pela CONTINUIDADE. Aterramento é referência (não reprova).
   // valores de continuidade válidos, para análise de dispersão (detectar pontos destoantes)
   const contVals=ds.map(d=>num(d.cont)).filter(x=>x!=null);
   let mediana=null, media=null, desvio=null;
@@ -1703,8 +1704,8 @@ function calcSP(){
     return c >= 2*mediana && (desvio>0 ? c >= media+2*desvio : true);
   };
   const rows=ds.map(d=>{const c=num(d.cont);
-    const okC=c==null?null:c<=limCont;
-    const destoante = okC && ehDestoante(c);            // dentro do limite, mas fora do padrão
+    const okC=c==null?null:(limCont==null?null:c<=limCont);
+    const destoante = c!=null && ehDestoante(c);            // dentro do limite, mas fora do padrão
     let ok;
     if(okC===null) ok='—';
     else if(!okC) ok='REPROVADO';
@@ -1712,51 +1713,33 @@ function calcSP(){
     else ok='APROVADO';
     return {...d,c,okC,destoante,ok};});
   const temDestoante=rows.some(r=>r.destoante);
-  const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.some(r=>r.ok==='ATENÇÃO'||r.ok==='—')?'ATENÇÃO':'APROVADO';
+  const status=!rows.length?'INCONCLUSIVO':limCont==null?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.some(r=>r.ok==='ATENÇÃO'||r.ok==='—')?'ATENÇÃO':'APROVADO';
   saveE('spda',{classe:cl,limCont:$('#sp_limc').value,ymax:$('#sp_ymax').value,descidas:spColeta()});
   $('#sp_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     ${temDestoante?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há ponto(s) de continuidade <b>destoante(s)</b> do conjunto (muito acima da mediana das demais descidas). Embora dentro do limite, recomenda-se verificar/corrigir essa(s) conexão(ões) — pode indicar aperto deficiente, corrosão ou emenda de maior resistência.</div>`:''}
     <table><thead><tr><th>Descida</th><th>Continuidade (Ω) — critério ≤${fmt(limCont,2)}</th><th>Situação</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td>${r.n}</td><td><b>${fmt(r.c,5)}</b>${r.destoante?' <span style="color:#b8860b">⚠ destoante</span>':''}</td><td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
-    <div class="hint" style="margin-top:10px">Aprovação pela <b>continuidade elétrica</b> (≤ ${fmt(limCont,2)} Ω), conforme NBR 5419:2015. Pontos dentro do limite, porém muito acima da mediana das demais descidas, são marcados como <b>atenção</b> para verificação.</div>
+    <div class="hint" style="margin-top:10px">Aprovação pela <b>continuidade elétrica</b> (≤ ${fmt(limCont,2)} Ω), conforme NBR 5419:2026. Pontos dentro do limite, porém muito acima da mediana das demais descidas, são marcados como <b>atenção</b> para verificação.</div>
     <div id="sp_charts_row" style="display:flex;gap:14px;flex-wrap:wrap"><div class="chart-wrap" style="flex:1;min-width:280px"><canvas id="sp_chart"></canvas></div><div class="chart-wrap" style="flex:1;min-width:280px"><canvas id="sp_chart2"></canvas></div></div>
     <div class="btn-row">${prepLaudoBtn("SPDA","spda",{status,rows:rows.map(r=>({n:r.n,c:r.c,ok:r.ok,destoante:r.destoante})),classe:cl,limCont,temDestoante})}</div>`;
-  // Gráfico de PERFIL das descidas (curva preenchida, estilo relevo) — só continuidade
-  const _pcts=rows.map(r=>r.c!=null?r.c/limCont*100:0).filter(v=>v>0);
-  const _maxPct=_pcts.length?Math.max(..._pcts):100;
+  // Gráfico de PERFIL das descidas — somente percentual quando existe limite
+  const _hasLim=limCont!=null && limCont>0;
+  const _pcts=_hasLim?rows.map(r=>r.c!=null?r.c/limCont*100:null):rows.map(()=>null);
+  const _validPcts=_pcts.filter(v=>v!=null&&isFinite(v));
+  const _maxPct=_validPcts.length?Math.max(..._validPcts):100;
   const _ymaxManual=num($('#sp_ymax').value);
   let spYMax, _ymaxAjustado=false;
-  if(_ymaxManual!=null&&_ymaxManual>0){
-    if(_ymaxManual<_maxPct){ spYMax=Math.ceil(_maxPct*1.15*10)/10; _ymaxAjustado=true; }
-    else spYMax=_ymaxManual;
-  }else{
-    spYMax=Math.min(120,Math.max(20,Math.ceil((_maxPct*1.3)/5)*5));
-  }
-  const _mostraLimite=spYMax>=100;
+  if(!_hasLim){spYMax=Math.max(20,_ymaxManual||100);} else if(_ymaxManual!=null&&_ymaxManual>0){
+    if(_ymaxManual<_maxPct){spYMax=Math.ceil(_maxPct*1.15*10)/10;_ymaxAjustado=true;}else spYMax=_ymaxManual;
+  }else spYMax=Math.min(120,Math.max(20,Math.ceil((_maxPct*1.3)/5)*5));
+  const _mostraLimite=_hasLim&&spYMax>=100;
   if(_ymaxAjustado){
     const av=document.querySelector('#sp_out .hint[data-ymax-avisado]');
-    if(!av){
-      const wrap=document.createElement('div');
-      wrap.className='hint'; wrap.setAttribute('data-ymax-avisado','1');
-      wrap.style.cssText='margin-top:10px;background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)';
-      wrap.innerHTML=`<b>⚠ Escala do gráfico ajustada:</b> o valor informado (${fmt(_ymaxManual,1)}%) é menor que a maior medição atual (${fmt(_maxPct,1)}% do limite ≤${fmt(limCont,2)} Ω) e cortaria a curva. Usamos automaticamente ${fmt(spYMax,1)}% — atualize o campo "Escala do gráfico" se preferir outro valor.`;
-      document.getElementById('sp_charts_row').before(wrap);
-    }
+    if(!av){const wrap=document.createElement('div');wrap.className='hint';wrap.setAttribute('data-ymax-avisado','1');wrap.style.cssText='margin-top:10px;background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)';wrap.innerHTML=`<b>⚠ Escala do gráfico ajustada:</b> o valor informado (${fmt(_ymaxManual,1)}%) é menor que a maior medição atual (${fmt(_maxPct,1)}% do limite). Usamos automaticamente ${fmt(spYMax,1)}%.`;document.getElementById('sp_charts_row').before(wrap);}
   }
-  drawChart('sp_chart',{type:'line',
-    data:{labels:rows.map(r=>r.n),datasets:[
-      {label:'Continuidade (% do limite ≤'+fmt(limCont,2)+' Ω)',data:rows.map(r=>r.c!=null?+(r.c/limCont*100).toFixed(1):null),
-        borderColor:'#7d5fc4',backgroundColor:'rgba(155,126,222,0.35)',fill:true,tension:0.45,
-        borderWidth:2,pointRadius:4,pointBackgroundColor:rows.map(r=>r.c==null?'#bbb':!r.okC?'#c52b2b':r.destoante?'#E8B84B':'#7d5fc4'),pointBorderColor:'#fff',pointBorderWidth:1}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-      plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:16,boxWidth:12}},
-        title:{display:true,text:'SPDA — Perfil de Conformidade por Descida'+(_mostraLimite?' (linha vermelha = limite)':' (valores em % do limite)')},
-        tooltip:{callbacks:{label:(ctx)=>{const r=rows[ctx.dataIndex];return 'Continuidade '+fmt(r.c,5)+' Ω ('+ctx.parsed.y+'% do limite '+fmt(limCont,2)+' Ω)';}}}},
-      scales:{y:{title:{display:true,text:'% do limite admissível'},max:spYMax,beginAtZero:true,border:{display:false},
-        grid:{color:(c)=>(_mostraLimite&&c.tick.value===100)?'#c52b2b':'#f0f0f0',lineWidth:(c)=>(_mostraLimite&&c.tick.value===100)?2:1}},
-        x:{border:{display:false},grid:{display:false}}}}
-  });
+  drawChart('sp_chart',{type:'line',data:{labels:rows.map(r=>r.n),datasets:[
+    {label:_hasLim?'Continuidade (% do limite)':'Continuidade — referência relativa indisponível',data:_pcts,borderColor:'#7d5fc4',backgroundColor:'rgba(155,126,222,0.35)',fill:true,tension:0.45,borderWidth:2,pointRadius:4}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},plugins:{title:{display:true,text:_hasLim?'SPDA — Perfil de Conformidade por Descida':'SPDA — Perfil de Continuidade (sem limite normativo informado)'}},scales:{y:{title:{display:true,text:_hasLim?'% do limite admissível':'% do limite — não aplicável'},max:spYMax,beginAtZero:true}}}});
   // 2º gráfico: continuidade absoluta por descida (Ω)
   drawChart2('sp_chart2',{type:'bar',
     data:{labels:rows.map(r=>r.n),datasets:[
@@ -1960,7 +1943,7 @@ function renderCadForm(){
 }
 function logoPreview(data,key){
   if(!data) return `<div class="muted" style="font-size:12px;padding:14px;border:1px dashed var(--line);border-radius:8px;text-align:center">Nenhum logo carregado</div>`;
-  return `<div style="display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card)">
+  return `<div style="display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff">
     <img src="${data}" style="max-height:56px;max-width:160px;object-fit:contain">
     <button class="btn btn-g" style="padding:6px 12px" onclick="removeLogo('${key}')">🗑 Remover</button></div>`;
 }
@@ -2011,16 +1994,16 @@ function renderDash(){
          ['rohm','🌀','Resistência Ôhmica','NBR 5356 · Desbalanço entre fases ≤2%'],
          ['rc','🔗','Resistência de Contato','NBR IEC 62271 · μΩ por contato'],
          ['ta','⚡','Tensão Aplicada','NBR 5356-3 / IEC 60076 · Hi-Pot 1min'],
-         ['rt','🔄','Relação de Transformação','NBR 5356 · TTR desvio ≤0,5%'],
+         ['rt','🔄','Relação de Transformação','TTR · critério por fabricante/procedimento'],
          ['atr','⏚','Aterramento','NBR 5419 / NBR 15749 · Ω malha'],
          ['spda','🗲','SPDA','NBR 5419 · Continuidade & resistência'],
          ['ppc','🔌','Ponto a Ponto de Cabos','NBR 5410 · Identificação, formação & continuidade'],
-         ['motor','⚙️','Ficha de Motor','IEEE 43 / NBR 17094 / ISO 10816'],
+         ['motor','⚙️','Ficha de Motor','IEEE 43 / NBR 17094 / ISO 20816'],
          ['mano','🧭','Manômetro','ISO/IEC 17025 · Erro F.E. & histerese'],
          ['termo','🌡️','Termômetro / PT-100','IEC 60751 · Erro °C'],
-         ['transd','📟','Transdutor','IEC 60770 · Loop 4-20mA'],
-         ['press','🎚️','Pressostato','IEC 60770 · Alarme/Disparo'],
-         ['nivel','📏','Nível','IEC 60770 · Loop test']
+         ['transd','📟','Transdutor','IEC 62828-1:2026 · Loop 4-20mA'],
+         ['press','🎚️','Pressostato','IEC 62828-1:2026 · Alarme/Disparo'],
+         ['nivel','📏','Nível','IEC 62828-1:2026 · Loop test']
         ].map(([p,i,t,d])=>`<div class="card" style="margin:0;cursor:pointer" onclick="go('${p}')">
           <h3>${i} ${t}</h3><div class="sub" style="margin:0">${d}</div></div>`).join('')}
     </div>
@@ -2037,8 +2020,8 @@ function renderDash(){
 function renderMotor(){
   const s=E('motor',{tensaoT:'0.5',r30:'',r60:'',r600:'',temp:CAD.temp,
     vib:[{p:'Motor LA',v:'',h:'',a:''},{p:'Motor LOA',v:'',h:'',a:''}],
-    corA:'',corB:'',corC:'',corNom:'',limVib:'4.5'});
-  $('#main').innerHTML=header('Ficha de Ensaio de Motor','Isolação (IA/IP) · Vibração (ISO 10816) · Corrente','IEEE 43 / NBR 17094 / ISO 10816')+cadResumo('motor')+`
+    corA:'',corB:'',corC:'',corNom:'',limVib:''});
+  $('#main').innerHTML=header('Ficha de Ensaio de Motor','Isolação (IA/IP) · Vibração (ISO 20816) · Corrente','IEEE 43 / NBR 17094 / ISO 20816')+cadResumo('motor')+`
   <div class="card">
     <h3>🛡️ Resistência de Isolação</h3>
     <div class="grid g4">
@@ -2048,10 +2031,10 @@ function renderMotor(){
       <div><label>R 10min (GΩ)</label><input id="mt_r600" value="${s.r600}"></div>
       <div><label>Temp. Enrolamento (°C)</label><input id="mt_temp" value="${s.temp}"></div>
     </div>
-    <div class="hint">IA (Índice de Absorção)=R1min/R30s ≥1,25 · IP (Índice de Polarização)=R10min/R1min ≥2 (IEEE 43 / NBR 5383).</div>
+    <div class="hint">IA = R1min/R30s (informativo). IP = R10min/R1min; o critério mínimo depende da classe de isolamento/procedimento (IEEE 43).</div>
     <div class="divider"></div>
     <h3>📳 Vibração (mm/s RMS)</h3>
-    <div class="grid g2"><div><label>Limite admissível (mm/s) — ISO 10816</label><input id="mt_limvib" value="${s.limVib}"></div></div>
+    <div class="grid g2"><div><label>Limite admissível (mm/s) — ISO 20816</label><input id="mt_limvib" value="${s.limVib}"></div></div>
     <div id="mt_vibrows" style="margin-top:10px">${s.vib.map((x,i)=>motorVibRow(x,i)).join('')}</div>
     <div class="divider"></div>
     <h3>🔌 Corrente de Operação (A)</h3>
@@ -2067,40 +2050,26 @@ function renderMotor(){
 }
 function motorVibRow(x,i){return `<div class="grid g4" style="margin-bottom:8px"><div><label>Ponto</label><input class="mt_vp" data-i="${i}" value="${x.p}"></div><div><label>Vertical</label><input class="mt_vv" data-i="${i}" value="${x.v}"></div><div><label>Horizontal</label><input class="mt_vh" data-i="${i}" value="${x.h}"></div><div><label>Axial</label><input class="mt_va" data-i="${i}" value="${x.a}"></div></div>`;}
 function calcMotor(){
-  const tensaoT=$('#mt_v').value,temp=num($('#mt_temp').value);
-  const r30=num($('#mt_r30').value),r60=num($('#mt_r60').value),r600=num($('#mt_r600').value);
-  const IA=(r60&&r30)?r60/r30:null, IP=(r600&&r60)?r600/r60:null;
-  const limVib=num($('#mt_limvib').value);
-  const vib=[...document.querySelectorAll('.mt_vp')].map((el,i)=>({p:el.value,v:document.querySelectorAll('.mt_vv')[i].value,h:document.querySelectorAll('.mt_vh')[i].value,a:document.querySelectorAll('.mt_va')[i].value}));
+  const tensaoT=$('#mt_v').value,temp=num($('#mt_temp').value);const r30=num($('#mt_r30').value),r60=num($('#mt_r60').value),r600=num($('#mt_r600').value);
+  const IA=(r60!=null&&r30!=null&&r30!==0)?r60/r30:null,IP=(r600!=null&&r60!=null&&r60!==0)?r600/r60:null;
+  const limVib=num($('#mt_limvib').value);const vib=[...document.querySelectorAll('.mt_vp')].map((el,i)=>({p:el.value,v:document.querySelectorAll('.mt_vv')[i].value,h:document.querySelectorAll('.mt_vh')[i].value,a:document.querySelectorAll('.mt_va')[i].value}));
   const corA=num($('#mt_a').value),corB=num($('#mt_b').value),corC=num($('#mt_c').value),corNom=num($('#mt_nom').value);
-  // status
-  let sIA=IA==null?'—':IA>=1.25?'APROVADO':IA>=1.1?'ATENÇÃO':'REPROVADO';
-  let sIP=IP==null?'—':IP>=2?'APROVADO':IP>=1?'ATENÇÃO':'REPROVADO';
-  const vibVals=vib.flatMap(x=>[num(x.v),num(x.h),num(x.a)]).filter(v=>v!=null);
-  let sVib = !vibVals.length||!limVib?'—':vibVals.every(v=>v<=limVib)?'APROVADO':vibVals.some(v=>v<=limVib*1.1)?'ATENÇÃO':'REPROVADO';
-  const cors=[corA,corB,corC].filter(v=>v!=null);
-  let desbCor=null,sCor='—';
-  if(cors.length>=2){const mx=Math.max(...cors),mn=Math.min(...cors),avg=cors.reduce((a,b)=>a+b,0)/cors.length;desbCor=(mx-mn)/avg*100;
-    const overNom = corNom? cors.some(c=>c>corNom):false;
-    sCor = overNom?'REPROVADO':desbCor<=10?'APROVADO':desbCor<=15?'ATENÇÃO':'REPROVADO';}
-  const all=[sIA,sIP,sVib,sCor].filter(x=>x!=='—');
-  const status=all.includes('REPROVADO')?'REPROVADO':all.includes('ATENÇÃO')?'ATENÇÃO':all.length?'APROVADO':'—';
+  const sIA=IA==null?'INCONCLUSIVO':'INFORMATIVO';const sIP=IP==null?'INCONCLUSIVO':IP>=2?'APROVADO':'INCONCLUSIVO';
+  const vibVals=vib.flatMap(x=>[num(x.v),num(x.h),num(x.a)]).filter(v=>v!=null);const sVib=!vibVals.length?'INCONCLUSIVO':limVib==null?'INCONCLUSIVO':vibVals.every(v=>v<=limVib)?'APROVADO':'REPROVADO';
+  const desbCor=currentUnbalance(corA,corB,corC);let sCor=desbCor==null?'INCONCLUSIVO':corNom!=null&&[corA,corB,corC].some(c=>c>corNom)?'REPROVADO':'INFORMATIVO';
+  const all=[sIP,sVib,sCor].filter(x=>x==='APROVADO'||x==='REPROVADO');const status=all.includes('REPROVADO')?'REPROVADO':all.length&&all.every(x=>x==='APROVADO')?'APROVADO':'INCONCLUSIVO';
   saveE('motor',{tensaoT,r30:$('#mt_r30').value,r60:$('#mt_r60').value,r600:$('#mt_r600').value,temp:$('#mt_temp').value,vib,corA:$('#mt_a').value,corB:$('#mt_b').value,corC:$('#mt_c').value,corNom:$('#mt_nom').value,limVib:$('#mt_limvib').value});
   $('#mt_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>Parâmetro</th><th>Valor</th><th>Critério</th><th>Situação</th></tr></thead><tbody>
-    <tr><td>IA (R1min/R30s)</td><td><b>${fmt(IA)}</b></td><td>≥1,25</td><td>${sIA==='—'?'—':tag(sIA)}</td></tr>
-    <tr><td>IP (R10min/R1min)</td><td><b>${fmt(IP)}</b></td><td>≥2,0</td><td>${sIP==='—'?'—':tag(sIP)}</td></tr>
-    <tr><td>Vibração máx.</td><td><b>${vibVals.length?fmt(Math.max(...vibVals)):'—'} mm/s</b></td><td>≤${limVib} mm/s</td><td>${sVib==='—'?'—':tag(sVib)}</td></tr>
-    <tr><td>Desbalanço de corrente</td><td><b>${fmt(desbCor)}%</b></td><td>≤10%${corNom?' e ≤'+corNom+'A':''}</td><td>${sCor==='—'?'—':tag(sCor)}</td></tr>
+    <tr><td>IA (R1min/R30s)</td><td><b>${fmt(IA)}</b></td><td>Informativo</td><td>${tag(sIA)}</td></tr>
+    <tr><td>IP (R10min/R1min)</td><td><b>${fmt(IP)}</b></td><td>Definir classe/procedimento; 2,0 é referência para classes B/F/H</td><td>${tag(sIP)}</td></tr>
+    <tr><td>Vibração máx.</td><td><b>${vibVals.length?fmt(Math.max(...vibVals)):'—'} mm/s RMS</b></td><td>${limVib!=null?'≤'+limVib+' mm/s — critério do tipo de máquina/ISO 20816':'Não definido'}</td><td>${tag(sVib)}</td></tr>
+    <tr><td>Desbalanço de corrente</td><td><b>${fmt(desbCor)}%</b></td><td>Máximo desvio da média; limite do fabricante/procedimento${corNom?' + corrente nominal':''}</td><td>${tag(sCor)}</td></tr>
     </tbody></table>
+    <div class="hint" style="margin-top:10px">Fórmula de desbalanço de corrente: máximo(|IA−Iméd|, |IB−Iméd|, |IC−Iméd|) / Iméd ×100. Não usar 10% como limite universal. Vibração deve ser classificada conforme tipo/porte/velocidade/montagem da máquina e ISO 20816 aplicável.</div>
     <div class="chart-wrap"><canvas id="mt_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Ficha de Motor","motor",{status,IA,IP,tensaoT,temp,r30,r60,r600,vib,limVib,corA,corB,corC,corNom,desbCor})}</div>`;
-  drawChart('mt_chart',{type:'bar',data:{labels:vib.map(x=>x.p),datasets:[
-    {label:'Vertical',data:vib.map(x=>num(x.v)),backgroundColor:'#1E4FD8'},
-    {label:'Horizontal',data:vib.map(x=>num(x.h)),backgroundColor:'#0d8a4f'},
-    {label:'Axial',data:vib.map(x=>num(x.a)),backgroundColor:'#b8860b'},
-    {type:'line',label:'Limite',data:vib.map(()=>limVib),borderColor:'#c52b2b',borderDash:[6,4],pointRadius:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Vibração por Ponto (mm/s)'}}}});
+  drawChart('mt_chart',{type:'bar',data:{labels:vib.map(x=>x.p),datasets:[{label:'Vertical',data:vib.map(x=>num(x.v)),backgroundColor:'#1E4FD8'},{label:'Horizontal',data:vib.map(x=>num(x.h)),backgroundColor:'#0d8a4f'},{label:'Axial',data:vib.map(x=>num(x.a)),backgroundColor:'#b8860b'},limVib!=null?{type:'line',label:'Limite',data:vib.map(()=>limVib),borderColor:'#c52b2b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Vibração por Ponto (mm/s RMS)'}}}});
 }
 
 /* ============ 9) MANÔMETRO ============ */
@@ -2136,7 +2105,7 @@ function calcMano(){
     if(hist!=null&&hist>worstHist)worstHist=hist;
     return {pad,c,d,errC,errD,hist};
   });
-  const status=!rows.length||!classe?'—':(worstErr<=classe&&worstHist<=classe)?'APROVADO':(worstErr<=classe*1.5&&worstHist<=classe*1.5)?'ATENÇÃO':'REPROVADO';
+  const status=!rows.length||!classe?'INCONCLUSIVO':(worstErr<=classe&&worstHist<=classe)?'APROVADO':'REPROVADO';
   saveE('mano',{fe:$('#mn_fe').value,classe:$('#mn_classe').value,pontos:pts});
   $('#mn_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>Padrão</th><th>↑ Erro %F.E.</th><th>↓ Erro %F.E.</th><th>Histerese %</th></tr></thead><tbody>
@@ -2155,14 +2124,14 @@ function calcMano(){
 function renderTermo(){
   const s=E('termo',{pontosRef:'30;60;90;100',tol:'1',itens:[{tag:'PT-100 #1',leit:['','','','']},{tag:'PT-100 #2',leit:['','','','']}]});
   const refs=s.pontosRef.split(';');
-  $('#main').innerHTML=header('Calibração de Termômetro / PT-100','Banho térmico rastreável · erro em °C','IEC 60751 / ISO 17025')+cadResumo('termo')+`
+  $('#main').innerHTML=header('Calibração de Termômetro / PT-100','Banho térmico rastreável · erro em °C','IEC 60751:2022 / ISO/IEC 17025')+cadResumo('termo')+`
   <div class="card">
     <h3>🌡️ Parâmetros</h3>
     <div class="grid g2">
       <div><label>Pontos de Referência (°C, separados por ; )</label><input id="tm_refs" value="${s.pontosRef}" onchange="reRenderTermo()"></div>
       <div><label>Tolerância de Erro (°C)</label><input id="tm_tol" value="${s.tol}"></div>
     </div>
-    <div class="hint">Erro = |Leitura − Referência|. PT-100 Classe A ≈ ±0,15+0,002·|t| °C · Classe B ≈ ±0,30+0,005·|t| °C (IEC 60751). Aprovado se todos ≤ tolerância.</div>
+    <div class="hint">Erro = |Leitura − Referência|. IEC 60751:2022: tolerância depende da classe do sensor e faixa. A tolerância de aceitação deve ser definida pela classe/especificação/certificado; o erro é Leitura − Referência.</div>
     <div class="divider"></div>
     <table><thead><tr><th>TAG / Item</th>${refs.map(r=>`<th>${r}°C</th>`).join('')}</tr></thead>
     <tbody id="tm_rows">${s.itens.map((it,i)=>`<tr><td><input class="tm_tag" data-i="${i}" value="${it.tag}" style="width:120px"></td>${refs.map((r,j)=>`<td><input class="tm_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
@@ -2203,7 +2172,7 @@ function calcTermo(){
 /* ============ 11) TRANSDUTOR (LOOP TEST) ============ */
 function renderTransd(){
   const s=E('transd',{span:'100',unidade:'bar',tol:'1',pontos:['0','25','50','75','100'],itens:[{tag:'Transd #1',leit:['','','','','']}]});
-  $('#main').innerHTML=header('Calibração de Transdutor','Loop test 4-20 mA · erro % do span','IEC 60770 / ISO 17025')+cadResumo('transd')+`
+  $('#main').innerHTML=header('Calibração de Transdutor','Loop test 4-20 mA · erro % do span','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('transd')+`
   <div class="card">
     <h3>📟 Parâmetros</h3>
     <div class="grid g3">
@@ -2211,7 +2180,7 @@ function renderTransd(){
       <div><label>Unidade</label><input id="td_un" value="${s.unidade}"></div>
       <div><label>Tolerância (% span)</label><input id="td_tol" value="${s.tol}"></div>
     </div>
-    <div class="hint">Pontos de teste em % do span (ex.: 0/25/50/75/100%). Erro % = (Medido − Esperado)/span ×100. Aprovado se todos ≤ tolerância.</div>
+    <div class="hint">Pontos de teste em % do span. Para transmissor 4–20 mA: Iesperada = 4 + 16·(PV−LRV)/(URV−LRV). Se o valor informado for PV, o erro é (PVmed−PVref)/span ×100. Se o valor informado for corrente, deve ser habilitado o modo corrente no procedimento.</div>
     <div class="divider"></div>
     <table><thead><tr><th>TAG</th>${s.pontos.map(p=>`<th>${p}%</th>`).join('')}</tr></thead>
     <tbody id="td_rows">${s.itens.map((it,i)=>`<tr><td><input class="td_tag" data-i="${i}" value="${it.tag}" style="width:120px"></td>${s.pontos.map((p,j)=>`<td><input class="td_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
@@ -2227,20 +2196,18 @@ function collectTransd(){
 }
 function addTransd(){const{itens}=collectTransd();itens.push({tag:'',leit:[]});const s=E('transd',{});s.itens=itens;s.span=$('#td_span').value;s.unidade=$('#td_un').value;s.tol=$('#td_tol').value;saveE('transd',s);renderTransd();}
 function calcTransd(){
-  const span=num($('#td_span').value),tol=num($('#td_tol').value),un=$('#td_un').value;
-  const{pts,itens}=collectTransd();
+  const span=num($('#td_span').value),tol=num($('#td_tol').value),un=$('#td_un').value;const{pts,itens}=collectTransd();
   let worst=0;const rows=itens.filter(it=>it.tag!=='').map(it=>{
-    const errs=pts.map((p,j)=>{const esp=span*num(p)/100,med=num(it.leit[j]);return(med!=null&&span)?(med-esp)/span*100:null;});
-    const mx=Math.max(...errs.filter(e=>e!=null).map(Math.abs),0);if(mx>worst)worst=mx;
-    const ok=errs.some(e=>e!=null)?(errs.every(e=>e==null||Math.abs(e)<=tol)?'APROVADO':'REPROVADO'):'—';
-    return {tag:it.tag,leit:it.leit,errs,ok};
+    const errs=pts.map((p,j)=>{const refPct=num(p);const ref=span*refPct/100;const med=num(it.leit[j]);return med!=null&&span!=null?pctErr(med,ref,span):null;});
+    const mx=maxAbs(errs)||0;worst=Math.max(worst,mx);const ok=errs.some(e=>e!=null)?(tol!=null&&errs.every(e=>e==null||Math.abs(e)<=tol)?'APROVADO':tol==null?'INCONCLUSIVO':'REPROVADO'):'INCONCLUSIVO';return {tag:it.tag,leit:it.leit,errs,ok};
   });
-  const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
+  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';
   const s=E('transd',{});s.itens=itens;s.span=$('#td_span').value;s.unidade=un;s.tol=$('#td_tol').value;saveE('transd',s);
   $('#td_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>TAG</th>${pts.map(p=>`<th>${p}% (erro)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.tag}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,3)+'%'}</td>`).join('')}<td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
-    <div class="norm-box" style="margin-top:12px">Maior erro: <b style="font-size:18px">${fmt(worst,3)}%</b> do span (tolerância ${tol}%)</div>
+    ${rows.map(r=>`<tr><td>${r.tag}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,3)+'%'}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    <div class="norm-box" style="margin-top:12px">Maior erro: <b style="font-size:18px">${fmt(worst,3)}%</b> do span · tolerância ${tol!=null?tol+'%':'não definida'}</div>
+    <div class="hint" style="margin-top:10px">Para um transmissor 4–20 mA, a saída ideal nos pontos é calculada pela relação linear 4–20 mA. O software mantém a comparação de variável de processo; para uma calibração elétrica do loop, registre também a corrente medida e compare com Iesperada = 4 + 16·fração do span.</div>
     <div class="chart-wrap"><canvas id="td_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Calibração de Transdutor","transd",{status,pts,un,rows,tol,worst,span})}</div>`;
   drawChart('td_chart',{type:'line',data:{labels:pts.map(p=>p+'%'),datasets:rows.map((r,k)=>({label:r.tag,data:r.leit.map(v=>num(v)),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b'][k%4],tension:.2})).concat([{label:'Ideal',data:pts.map(p=>span*num(p)/100),borderColor:'#999',borderDash:[5,4],pointRadius:0}])},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Resposta do Transdutor'}}}});
@@ -2248,12 +2215,12 @@ function calcTransd(){
 
 /* ============ 12) PRESSOSTATO ============ */
 function renderPress(){
-  const s=E('press',{tol:'5',itens:[{tag:'PIS #1',tipo:'-100..10bar',spAlarme:'',alarme:'',spDisparo:'',disparo:''}]});
-  $('#main').innerHTML=header('Calibração de Pressostato','Verificação de alarme e disparo (setpoint)','IEC 60770 / ISO 17025')+cadResumo('press')+`
+  const s=E('press',{tol:'',itens:[{tag:'PIS #1',tipo:'-100..10bar',spAlarme:'',alarme:'',spDisparo:'',disparo:''}]});
+  $('#main').innerHTML=header('Calibração de Pressostato','Verificação de alarme e disparo (setpoint)','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('press')+`
   <div class="card">
     <h3>🎚️ Parâmetros</h3>
-    <div class="grid g2"><div><label>Tolerância de Erro (% do setpoint)</label><input id="ps_tol" value="${s.tol}"></div></div>
-    <div class="hint">Erro relativo = |Atuação − Setpoint|/Setpoint ×100. Aprovado quando alarme e disparo atuam dentro da tolerância do setpoint de projeto.</div>
+    <div class="grid g2"><div><label>Tolerância de Erro (% do span/setpoint — conforme procedimento)</label><input id="ps_tol" value="${s.tol}"></div></div>
+    <div class="hint">Erro absoluto = Atuação − Setpoint. Se o procedimento expressar a tolerância em % do span, use |erro|/span×100; não dividir pelo setpoint quando o setpoint for próximo de zero. Aprovado quando alarme e disparo atuam dentro da tolerância do setpoint de projeto.</div>
     <div class="divider"></div>
     <div id="ps_rows">${s.itens.map((it,i)=>pressRow(it,i)).join('')}</div>
     <div class="row-add"><button class="btn btn-g" onclick="addPress()">＋ Adicionar pressostato</button></div>
@@ -2275,28 +2242,26 @@ function calcPress(){
   const tol=num($('#ps_tol').value);const itens=collectPress();
   const rows=itens.filter(it=>it.tag!=='').map(it=>{
     const spa=num(it.spAlarme),a=num(it.alarme),spd=num(it.spDisparo),d=num(it.disparo);
-    const eA=(spa&&a!=null)?Math.abs(a-spa)/Math.abs(spa)*100:null;
-    const eD=(spd&&d!=null)?Math.abs(d-spd)/Math.abs(spd)*100:null;
-    const errs=[eA,eD].filter(e=>e!=null);
-    const ok=errs.length?(errs.every(e=>e<=tol)?'APROVADO':errs.every(e=>e<=tol*1.5)?'ATENÇÃO':'REPROVADO'):'—';
+    const eA=(spa!=null&&a!=null)?a-spa:null,eD=(spd!=null&&d!=null)?d-spd:null;
+    const errs=[eA,eD].filter(e=>e!=null);const ok=errs.length?(tol!=null?(errs.every(e=>Math.abs(e)<=tol)?'APROVADO':'REPROVADO'):'INCONCLUSIVO'):'INCONCLUSIVO';
     return {...it,eA,eD,ok};
   });
-  const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.some(r=>r.ok==='ATENÇÃO')?'ATENÇÃO':'APROVADO';
-  saveE('press',{tol:$('#ps_tol').value,itens});
+  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';saveE('press',{tol:$('#ps_tol').value,itens});
   $('#ps_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>TAG</th><th>Alarme (SP→Atu / erro)</th><th>Disparo (SP→Atu / erro)</th><th>Situação</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.spAlarme||'—'} → ${r.alarme||'—'} (${fmt(r.eA,2)}%)</td><td>${r.spDisparo||'—'} → ${r.disparo||'—'} (${fmt(r.eD,2)}%)</td><td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.spAlarme||'—'} → ${r.alarme||'—'} (${fmt(r.eA,3)} unidade)</td><td>${r.spDisparo||'—'} → ${r.disparo||'—'} (${fmt(r.eD,3)} unidade)</td><td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    <div class="hint" style="margin-top:10px">Para pressostatos, o critério de aceitação deve ser especificado pelo fabricante/procedimento. O erro principal é a diferença entre ponto de atuação e setpoint; tolerâncias percentuais devem referir-se ao span quando assim definido, evitando distorção em setpoints próximos de zero.</div>
     <div class="btn-row">${prepLaudoBtn("Calibração de Pressostato","press",{status,rows,tol})}</div>`;
 }
 
 /* ============ 13) NÍVEL ============ */
 function renderNivel(){
   const s=E('nivel',{tol:'1',pontos:['25','50','75','100'],itens:[{tag:'Nível #1',tipo:'1700 mm',leit:['','','','']}]});
-  $('#main').innerHTML=header('Calibração de Sensor de Nível','Loop test nos pontos de referência','IEC 60770 / ISO 17025')+cadResumo('nivel')+`
+  $('#main').innerHTML=header('Calibração de Sensor de Nível','Loop test nos pontos de referência','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('nivel')+`
   <div class="card">
     <h3>📏 Parâmetros</h3>
     <div class="grid g2"><div><label>Tolerância de Erro (%)</label><input id="nv_tol" value="${s.tol}"></div><div><label>Pontos (% — separados por ; )</label><input id="nv_pts" value="${s.pontos.join(';')}" onchange="reRenderNivel()"></div></div>
-    <div class="hint">Verificação do sinal em cada ponto de referência (25/50/75/100%). Erro % = |Medido − Esperado|. Aprovado se ≤ tolerância.</div>
+    <div class="hint">Verificação do sinal em cada ponto de referência (25/50/75/100%). Erro = Medido − Esperado. Para erro relativo: |Erro|/span ×100. A tolerância deve ser definida pela exatidão do instrumento/procedimento.</div>
     <div class="divider"></div>
     <table><thead><tr><th>TAG</th><th>Tipo</th>${s.pontos.map(p=>`<th>${p}%</th>`).join('')}</tr></thead>
     <tbody id="nv_rows">${s.itens.map((it,i)=>`<tr><td><input class="nv_tag" data-i="${i}" value="${it.tag}" style="width:100px"></td><td><input class="nv_tipo" data-i="${i}" value="${it.tipo}" style="width:90px"></td>${s.pontos.map((p,j)=>`<td><input class="nv_l" data-i="${i}" data-j="${j}" value="${it.leit[j]||''}"></td>`).join('')}</tr>`).join('')}</tbody></table>
@@ -2311,39 +2276,37 @@ function addNivel(){const{pts,itens}=collectNivel();itens.push({tag:'',tipo:'',l
 function calcNivel(){
   const tol=num($('#nv_tol').value);const{pts,itens}=collectNivel();
   let worst=0;const rows=itens.filter(it=>it.tag!=='').map(it=>{
-    const errs=pts.map((p,j)=>{const esp=num(p),med=num(it.leit[j]);return(esp!=null&&med!=null)?Math.abs(med-esp):null;});
-    const mx=Math.max(...errs.filter(e=>e!=null),0);if(mx>worst)worst=mx;
-    const ok=errs.some(e=>e!=null)?(errs.every(e=>e==null||e<=tol)?'APROVADO':'REPROVADO'):'—';
-    return {tag:it.tag,tipo:it.tipo,leit:it.leit,errs,ok};
+    const errs=pts.map((p,j)=>{const esp=num(p),med=num(it.leit[j]);return(esp!=null&&med!=null)?med-esp:null;});
+    const mx=maxAbs(errs)||0;worst=Math.max(worst,mx);const ok=errs.some(e=>e!=null)?(tol!=null&&errs.every(e=>e==null||Math.abs(e)<=tol)?'APROVADO':tol==null?'INCONCLUSIVO':'REPROVADO'):'INCONCLUSIVO';return {tag:it.tag,tipo:it.tipo,leit:it.leit,errs,ok};
   });
-  const status=!rows.length?'—':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':'APROVADO';
-  saveE('nivel',{tol:$('#nv_tol').value,pontos:pts,itens});
+  const status=!rows.length?'INCONCLUSIVO':rows.some(r=>r.ok==='REPROVADO')?'REPROVADO':rows.every(r=>r.ok==='APROVADO')?'APROVADO':'INCONCLUSIVO';saveE('nivel',{tol:$('#nv_tol').value,pontos:pts,itens});
   $('#nv_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <table><thead><tr><th>TAG</th><th>Tipo</th>${pts.map(p=>`<th>${p}% (erro)</th>`).join('')}<th>Situação</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.tipo}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)}</td>`).join('')}<td>${r.ok==='—'?'—':tag(r.ok)}</td></tr>`).join('')}</tbody></table>
-    <div class="norm-box" style="margin-top:12px">Maior erro: <b style="font-size:18px">${fmt(worst,2)}</b> (tolerância ${tol})</div>
+    ${rows.map(r=>`<tr><td>${r.tag}</td><td>${r.tipo}</td>${r.errs.map(e=>`<td>${e==null?'—':fmt(e,2)}</td>`).join('')}<td>${tag(r.ok)}</td></tr>`).join('')}</tbody></table>
+    <div class="norm-box" style="margin-top:12px">Maior erro absoluto: <b style="font-size:18px">${fmt(worst,2)}</b> unidade de processo · tolerância ${tol!=null?tol:'não definida'}</div>
+    <div class="hint" style="margin-top:10px">Para ensaio de nível em 4–20 mA, o valor de processo deve ser obtido por PV = LRV + (I−4)/16 × span. Os pontos percentuais são referência de processo; a aceitação depende da exatidão especificada do transmissor.</div>
     <div class="btn-row">${prepLaudoBtn("Calibração de Nível","nivel",{status,pts,rows,tol,worst})}</div>`;
 }
 
 /* ============ NORMAS / CRITÉRIOS POR ENSAIO ============ */
 const NORMAS={
- ri:{n:'IEEE 43 / ABNT NBR 5383 / NBR 10295',c:'PI = R10min/R1min (≥2 satisfatório, ≥4 excelente). DAR = R60s/R30s (≥1,25). Quando aplicada, a resistência é corrigida para a temperatura de referência (20°C) dobrando/reduzindo pela metade a cada 10°C de variação (IEEE 43).'},
- rohm:{n:'ABNT NBR 5356-1 / IEC 60076-1',c:'Desbalanço entre fases = (Rmáx−Rmín)/Rméd ×100 ≤ 2% (típico). Valores comparados ao histórico/datasheet corrigidos por temperatura.'},
- rc:{n:'ABNT NBR IEC 62271-1 / NBR IEC 62271-100',c:'Resistência de contato medida em corrente contínua ≥100 A (DLRO) ≤ limite do fabricante por polo.'},
- ta:{n:'ABNT NBR 5356-3 / IEC 60076-3',c:'Aplicação da tensão de prova durante 60 s. Aprovado quando não ocorre disrupção, arco ou descarga disruptiva.'},
- rt:{n:'ABNT NBR 5356-1 / IEC 60076-1',c:'Desvio entre relação medida (TTR) e teórica ≤ 0,5%. Verificação em todas as derivações/fases.'},
- atr:{n:'ABNT NBR 5419 / NBR 15749 / NBR 14039',c:'Método queda de potencial (62%). Resistência ≤10 Ω (geral); ≤5 Ω para subestações e instalações sensíveis.'},
- spda:{n:'ABNT NBR 5419-1/2/3 (2015)',c:'O ensaio principal é a continuidade elétrica das conexões e condutores de descida (critério ≤ 1,0 Ω). Inspeção conforme o nível de proteção.'},
- ppc:{n:'Projeto Executivo · ABNT NBR 5410:2004',c:'Verificação de identificação, formação, função, percurso e continuidade elétrica de cada cabo em relação à lista de cabos do projeto executivo. Aprovação condicionada à conformidade de todos os cabos avaliados.'},
- motor:{n:'IEEE 43 / ABNT NBR 17094 / NBR 5383-1 / ISO 10816',c:'Resistência de isolamento (IA/IP), vibração e corrente de operação. IP≥2, IA≥1,25. Vibração conforme ISO 10816 (faixa por porte/montagem). Corrente equilibrada e ≤ nominal.'},
- mano:{n:'ABNT NBR ISO/IEC 17025 / INMETRO RBC',c:'Calibração por comparação com padrão rastreável. Erro % do fundo de escala (F.E.) e histerese dentro da classe de exatidão do instrumento.'},
- termo:{n:'ABNT NBR ISO/IEC 17025 / IEC 60751 (PT-100)',c:'Comparação em banho térmico rastreável. Erro em °C dentro da tolerância da classe (PT-100 Classe A/B conforme IEC 60751).'},
- transd:{n:'ABNT NBR ISO/IEC 17025 / IEC 60770',c:'Loop test 4-20 mA / sinal de saída. Erro percentual do span dentro da exatidão especificada do transmissor.'},
- press:{n:'ABNT NBR ISO/IEC 17025 / IEC 60770',c:'Verificação de ponto de alarme e disparo (setpoint) e erro relativo. Atuação dentro da tolerância do projeto/setpoint.'},
- nivel:{n:'ABNT NBR ISO/IEC 17025 / IEC 60770',c:'Verificação de medição de nível por loop test nos pontos de referência. Erro dentro da exatidão especificada.'},
- fp:{n:'IEEE C57.152 / IEC 60137 / NBR 5356',c:'Fator de potência (tangente delta) da isolação medido em ponte de capacitância. Aprovação por comparação ao histórico e ao limite típico (≤0,5% a 1% conforme equipamento), corrigido para 20 °C.'},
- dp:{n:'IEC 60270 / IEEE C57.152',c:'Descargas parciais medidas em pC sob tensão aplicada. Aprovação quando o nível fica abaixo do limite especificado para o equipamento (tipicamente ≤ algumas centenas de pC).'},
- oleo:{n:'IEC 60156 / ABNT NBR 10576 / IEC 60422',c:'Rigidez dielétrica do óleo isolante medida em conjunto de eletrodos padronizado. Aprovação quando a tensão de ruptura média ≥ limite mínimo conforme classe de tensão do equipamento.'}
+ ri:{n:'IEEE 43-2013 (máquinas rotativas) / norma e procedimento específicos do equipamento',c:'IR1 é comparada a 40 °C quando aplicável. IEEE 43-2013 possui critérios distintos de IR mínima conforme tipo/idade/construção do enrolamento; não usar kV+1 como regra universal. PI = R10/R1; critérios de PI dependem da classe/procedimento.'},
+ rohm:{n:'IEC 60076-1 / especificação do fabricante / procedimento',c:'Rmed = V/I quando aplicável. Desbalanço = (Rmáx−Rmín)/Rméd×100 é indicador comparativo; o limite deve vir do fabricante, fábrica, histórico ou procedimento.'},
+ rc:{n:'IEC/ABNT NBR IEC 62271 aplicável + fabricante/procedimento',c:'Resistência de contato por micro-ohmímetro; R=V/I. Limite por polo deve ser específico do equipamento. Sem limite universal de 50 µΩ.'},
+ ta:{n:'IEC 60060 / IEC 60076-3:2013+A1:2018, conforme equipamento',c:'A tensão, duração, sequência e critérios de suportabilidade devem vir do ensaio específico. Sem limite universal de 5 mA de fuga.'},
+ rt:{n:'IEC 60076-1 / especificação do fabricante',c:'Rteórica=Vp/Vs; erro=(Rmed−Rteórica)/Rteórica×100. Tolerância conforme TAP, fabricante e procedimento; 0,5% não é universal.'},
+ atr:{n:'ABNT NBR 15749 / NBR 15751 / NBR 14039 / IEEE 81, conforme aplicação',c:'R=V/I no método de queda de potencial. Limite depende do sistema e projeto; não usar 10 Ω/5 Ω universalmente. Subestações exigem avaliação de segurança da malha quando aplicável.'},
+ spda:{n:'ABNT NBR 5419:2026 (Partes 1 a 4), observando transição aplicável',c:'Continuidade e integridade do PDA/SPDA devem ser verificadas conforme procedimento e documentação. Não usar 1 Ω como limite universal.'},
+ ppc:{n:'ABNT NBR 5410 / ABNT NBR 14039 / projeto executivo, conforme tensão',c:'Verificação ponto a ponto, continuidade, identificação e correspondência com projeto.'},
+ motor:{n:'IEEE 43-2013 / IEC 60034 / ISO 20816, conforme máquina',c:'IA=R1/R30 e PI=R10/R1. PI deve seguir classe/procedimento. Vibração deve ser classificada pela parte aplicável da ISO 20816 e características da máquina. Desbalanço de corrente pelo máximo desvio da média.'},
+ mano:{n:'ABNT NBR ISO/IEC 17025 + especificação do instrumento / procedimento de calibração',c:'Erro = indicação−referência. Erro %FE = erro/FE×100 quando essa é a base definida. Histerese = diferença entre ciclos, também referida à base definida.'},
+ termo:{n:'IEC 60751:2022 + ABNT NBR ISO/IEC 17025',c:'PT100 segue relação resistência-temperatura da IEC 60751 e classe de tolerância especificada. Erro = indicação−referência.'},
+ transd:{n:'IEC 62828-1:2026 + parte específica da série / ABNT NBR ISO/IEC 17025',c:'Para 4–20 mA: I=4+16×fração do span; PV=LRV+(I−4)/16×span. Erro relativo deve usar a base de tolerância especificada.'},
+ press:{n:'IEC 62828-1:2026 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'Erro de atuação = atuação−setpoint. Tolerância deve ser expressa na unidade ou como % do span conforme procedimento; evitar % do setpoint perto de zero.'},
+ nivel:{n:'IEC 62828-1:2026 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'PV=LRV+(I−4)/16×span. Erro = PVmed−PVref; tolerância conforme exatidão especificada.'},
+ fp:{n:'IEEE C57.152 / IEC 60137 / procedimento específico',c:'Tan δ/fator de dissipação é diagnóstico. Limite de aceitação depende do equipamento, temperatura, tensão, frequência e histórico; não usar 0,5% universal.'},
+ dp:{n:'IEC 60270 / norma específica do equipamento',c:'IEC 60270 define o método de medição. Limites em pC dependem do equipamento, ensaio e especificação; não usar 500 pC universal.'},
+ oleo:{n:'IEC 60156:2025 / norma e procedimento do equipamento',c:'Determinação da tensão de ruptura dielétrica em frequência de potência. Registrar cada ruptura; a média é estatística e não substitui critério de aceitação específico.'}
 };
 
 /* Texto de análise/metodologia por ensaio: descreve como os valores foram obtidos e o critério aplicado */
@@ -2381,20 +2344,20 @@ function analiseRI(d){
   return tipoFrase+'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão contínua entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em '+tlist+'. '+indices+' '+corr+' A aprovação considerou '+critDesc+alvo+', avaliando o pior caso entre as fases.';
 }
 const ANALISE={
- ri:'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão CC entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em 30 s, 60 s e 10 min. A partir dessas leituras calculou-se o Índice de Polarização (PI = R10min/R1min) e a Razão de Absorção Dielétrica (DAR = R60s/R30s). Quando a correção de temperatura é aplicada, a resistência é referida a 20 °C segundo a regra da IEEE 43 (a cada 10 °C de variação a resistência dobra/reduz pela metade); caso contrário, são considerados os valores medidos. A aprovação considera o pior caso entre as fases, comparando a resistência ao valor mínimo adotado e PI/DAR aos limites normativos (PI ≥ 2; DAR ≥ 1,25).',
+ ri:'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão CC entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em 30 s, 60 s e 10 min. A partir dessas leituras calculou-se o Índice de Polarização (PI = R10min/R1min) e a Razão de Absorção Dielétrica (DAR = R60s/R30s). Quando a correção de temperatura é aplicada, a resistência é referida à temperatura especificada pelo procedimento (40 °C para a comparação IEEE 43 de máquinas rotativas, quando aplicável) (a cada 10 °C de variação a resistência dobra/reduz pela metade); caso contrário, são considerados os valores medidos. A aprovação considera o pior caso entre as fases, comparando a resistência ao valor mínimo adotado e PI/DAR aos limites normativos (PI ≥ 2; DAR ≥ 1,25).',
  rohm:'A resistência ôhmica dos enrolamentos foi medida em corrente contínua por método de queda de tensão (ponte/microhmímetro) em cada par de fases. Calculou-se o desbalanço percentual entre fases [(Rmáx−Rmín)/Rméd ×100], comparado ao limite típico de 2% conforme NBR 5356-1, com valores referenciados à temperatura de medição.',
  rc:'A resistência de contato foi medida em corrente contínua (≥100 A, método DLRO) em cada polo/contato. Os valores obtidos foram comparados ao limite máximo especificado pelo fabricante para o equipamento, sendo reprovado o polo cuja resistência supere o limite.',
  ta:'O ensaio de tensão aplicada (Hi-Pot) foi executado elevando a tensão de forma progressiva, em incrementos iguais por minuto, até atingir o valor de prova no minuto final, registrando-se a corrente de fuga por fase a cada minuto. Conforme NBR 5356-3 / IEC 60076-3, o ensaio é aprovado quando não ocorre disrupção, arco ou descarga e a corrente de fuga permanece baixa e estável. A elevação da corrente acompanhando o aumento da tensão é esperada e não indica defeito; a avaliação de estabilidade concentra-se na fase final do ensaio, com a tensão próxima do valor pleno. Sinaliza-se atenção somente quando a corrente atinge níveis elevados e mantém crescimento sustentado nesse período, indicando possível degradação do isolamento.',
- rt:'A relação de transformação foi medida com TTR em todas as derivações e fases. O desvio percentual entre a relação medida e a relação teórica (nominal) foi calculado e comparado ao limite de ±0,5% conforme NBR 5356-1 / IEC 60076-1.',
- atr:'A resistência de aterramento foi medida pelo método da queda de potencial (regra dos 62%) com terrômetro. O valor obtido foi comparado aos limites aplicáveis (≤10 Ω geral; ≤5 Ω para instalações sensíveis) conforme NBR 5419 / NBR 15749.',
- spda:'Conforme a NBR 5419:2015, o ensaio principal do SPDA é a verificação da continuidade elétrica das conexões, descidas e captores, realizada com mili/micro-ohmímetro, sendo a aprovação condicionada à baixa resistência das conexões (critério ≤ 1,0 Ω). A avaliação considerou o nível de proteção e a integridade/equipotencialização do sistema, além da identificação de pontos destoantes que indiquem conexões deficientes.',
+ rt:'A relação de transformação foi medida com TTR em todas as derivações e fases. O desvio percentual entre a relação medida e a relação teórica (nominal) foi calculado e comparado ao limite definido para o transformador/TAP pelo fabricante e procedimento aplicável.',
+ atr:'A resistência de aterramento foi medida pelo método da queda de potencial (regra dos 62%) com terrômetro. O valor obtido foi comparado ao critério específico da instalação e do projeto, sem usar 10 Ω/5 Ω como limite universal.',
+ spda:'Conforme a NBR 5419:2026, o ensaio principal do SPDA é a verificação da continuidade elétrica das conexões, descidas e captores, realizada com mili/micro-ohmímetro, sendo a conformidade determinada pelo procedimento e pela documentação aplicável; não se usa 1,0 Ω como limite universal. A avaliação considerou o nível de proteção e a integridade/equipotencialização do sistema, além da identificação de pontos destoantes que indiquem conexões deficientes.',
  ppc:'A verificação ponto a ponto dos cabos foi realizada por continuidade elétrica e conferência documental/visual, comparando identificação (número/revisão), formação, tipo, condutores ocupados, extremidades (De/Para), função e percurso de cada cabo com a lista de cabos do projeto executivo. Cada cabo foi classificado individualmente como conforme, não conforme ou pendente de verificação, sendo a aprovação do ensaio condicionada à conformidade de todos os cabos avaliados.',
- motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s) e IP (R10min/R1min); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada às faixas da ISO 10816 conforme porte e montagem; e equilíbrio de corrente entre fases. A aprovação exige IP≥2, IA≥1,25, vibração dentro da faixa admissível e desbalanço de corrente dentro do limite.',
+ motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s) e IP (R10min/R1min); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada às faixas da ISO 20816 conforme porte e montagem; e equilíbrio de corrente entre fases. A aprovação exige IP≥2, IA≥1,25, vibração dentro da faixa admissível e desbalanço de corrente dentro do limite.',
  mano:'A calibração do manômetro foi realizada por comparação com padrão rastreável em pontos crescentes e decrescentes da faixa. Calcularam-se o erro percentual referido ao fundo de escala e a histerese (diferença entre as curvas), comparados à classe de exatidão do instrumento conforme NBR ISO/IEC 17025.',
  termo:'O termômetro/sensor PT-100 foi verificado por comparação com padrão rastreável em pontos de referência definidos. O erro em °C de cada ponto foi calculado e comparado à tolerância da classe (PT-100 Classe A/B conforme IEC 60751).',
- transd:'O transdutor foi verificado por loop test ao longo do span (sinal 4–20 mA ou equivalente) nos pontos de referência. O erro percentual do span foi calculado e comparado à exatidão especificada do transmissor (IEC 60770).',
+ transd:'O transdutor foi verificado por loop test ao longo do span (sinal 4–20 mA ou equivalente) nos pontos de referência. O erro percentual do span foi calculado e comparado à exatidão especificada do transmissor (IEC 62828-1:2026).',
  press:'O pressostato foi verificado quanto aos pontos de atuação (setpoint de alarme e de disparo), registrando-se a pressão real de comutação. O erro relativo em relação ao setpoint foi calculado e comparado à tolerância de projeto.',
- nivel:'O instrumento de nível foi verificado por loop test nos pontos percentuais de referência, calculando-se o erro em relação ao valor esperado e comparando-o à exatidão especificada (IEC 60770).',
+ nivel:'O instrumento de nível foi verificado por loop test nos pontos percentuais de referência, calculando-se o erro em relação ao valor esperado e comparando-o à exatidão especificada (IEC 62828-1:2026).',
  fp:'O fator de potência da isolação (tangente delta) foi medido em ponte de capacitância, registrando-se a capacitância e o fator de dissipação de cada medição. Os valores foram comparados ao histórico do equipamento e ao limite típico admissível, referidos a 20 °C, servindo como indicador de umidade e envelhecimento da isolação conforme IEEE C57.152 / IEC 60137.',
  dp:'As descargas parciais foram medidas em picocoulombs (pC) sob tensão aplicada, conforme IEC 60270, registrando-se o nível máximo de cada ponto. A aprovação considera o nível de descarga abaixo do limite especificado para o equipamento, sendo a intensidade um indicador da integridade da isolação.',
  oleo:'A rigidez dielétrica do óleo isolante foi determinada por ensaio de tensão de ruptura em conjunto de eletrodos padronizado, realizando-se sucessivas aplicações e calculando-se a média conforme IEC 60156. O valor médio foi comparado ao mínimo admissível para a classe de tensão do equipamento, indicando o nível de contaminação por umidade e partículas.'
@@ -2482,7 +2445,7 @@ function laudoBuild(id){
     return `<tr><td>${c.cabo||'—'}</td><td>${c.de||'—'} → ${c.para||'—'}${c.form?' · '+c.form+' mm²':''}${c.comp?' · Comp.: '+c.comp+' m':''} <b>(${sit})</b></td></tr>`;
   }).join('');}
   else if(l.key==='spda'){corpo=`<tr><td>Nível de proteção</td><td>Classe ${d.classe}</td></tr>
-    <tr><td>Critério de continuidade</td><td>≤ ${fmt(d.limCont||1,2)} Ω (ensaio principal NBR 5419:2015)</td></tr>
+    <tr><td>Critério de continuidade</td><td>≤ ${fmt(d.limCont||1,2)} Ω (ensaio principal NBR 5419:2026)</td></tr>
     ${d.temDestoante?`<tr><td>Observação</td><td><b>Atenção:</b> ponto(s) de continuidade destoante(s) do conjunto — recomenda-se verificação da(s) conexão(ões).</td></tr>`:''}
     <tr><td colspan="2" class="subhd">Medições por descida</td></tr>`+d.rows.map(r=>`<tr><td>${r.n}</td><td>Continuidade ${fmt(r.c,5)} Ω <b>(${r.ok})</b>${r.destoante?' ⚠ destoante':''}</td></tr>`).join('');}
   else if(l.key==='motor'){corpo=`<tr><td>Tensão de teste</td><td>${d.tensaoT} kV</td></tr><tr><td>Temp. enrolamento</td><td>${d.temp} °C</td></tr>
@@ -2833,11 +2796,11 @@ const BIBLIO_NORMAS = [
     {cod:'IEEE 80', org:'IEEE', tit:'Guide for Safety in AC Substation Grounding', desc:'Critérios de segurança para malhas de aterramento de subestações, com foco em tensões de passo e toque admissíveis.'},
   ]},
   {cat:'SPDA / Descargas Atmosféricas', cor:'#c52b2b', itens:[
-    {cod:'ABNT NBR 5419 (2015) — partes 1 a 4', org:'ABNT', tit:'Proteção contra descargas atmosféricas', desc:'Norma de SPDA: princípios gerais (parte 1), gerenciamento de risco (parte 2), danos físicos (parte 3) e sistemas elétricos/eletrônicos internos (parte 4). O ensaio principal é a continuidade das conexões; a resistência de aterramento deixou de ter valor máximo obrigatório.'},
+    {cod:'ABNT NBR 5419:2026 — partes 1 a 4', org:'ABNT', tit:'Proteção contra descargas atmosféricas', desc:'Série ABNT NBR 5419:2026 — princípios gerais, análise de risco, danos físicos/perigos à vida e sistemas internos/MPS. Substitui a edição 2015, observando o período de transição previsto pela própria norma.'},
     {cod:'IEC 62305 (série)', org:'IEC', tit:'Protection against lightning', desc:'Norma internacional que originou a NBR 5419, com a mesma estrutura de quatro partes para proteção contra descargas atmosféricas.'},
   ]},
   {cat:'Instalações Elétricas', cor:'#0b6b6b', itens:[
-    {cod:'ABNT NBR 5410', org:'ABNT', tit:'Instalações elétricas de baixa tensão', desc:'Condições para instalações ≤1000 V CA. Exige verificação e ensaios antes da energização: resistência de isolamento dos circuitos, continuidade dos condutores de proteção e teste de dispositivos (DR, disjuntores).'},
+    {cod:'ABNT NBR 5410:2004 + emendas/versão vigente aplicável', org:'ABNT', tit:'Instalações elétricas de baixa tensão', desc:'Condições para instalações ≤1000 V CA. Exige verificação e ensaios antes da energização: resistência de isolamento dos circuitos, continuidade dos condutores de proteção e teste de dispositivos (DR, disjuntores).'},
     {cod:'ABNT NBR 14039', org:'ABNT', tit:'Instalações elétricas de média tensão (1 kV a 36,2 kV)', desc:'Requisitos para projeto, execução e ensaios de instalações de média tensão, incluindo aterramento, isolamento e proteção. Verificação periódica do sistema de aterramento.'},
     {cod:'IEC 60364 (série)', org:'IEC', tit:'Low-voltage electrical installations', desc:'Base internacional da NBR 5410 para instalações elétricas de baixa tensão.'},
   ]},
@@ -2947,7 +2910,7 @@ function renderNormas(){
   <div class="card">
     <div class="hint">📖 Referência de consulta com código, título e descritivo do escopo de cada norma. Os textos são resumos do propósito de cada norma. Para o conteúdo integral — que é protegido por direitos autorais — use o botão <b>“Consultar norma oficial”</b>, que abre a página do organismo (ABNT, IEC, IEEE) onde a norma pode ser lida/adquirida legalmente.</div>
     <div style="margin-top:12px"><label>🔎 Buscar norma (código, assunto, organismo)</label><input id="nf_q" value="${_filtroNorma}" oninput="setFiltroNorma(this.value)" placeholder="ex: isolamento, 5419, aterramento, IEC..."></div>
-    <div style="font-size:12px;color:#65708c;margin-top:8px">${total} normas catalogadas em ${BIBLIO_NORMAS.length} categorias.</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${total} normas catalogadas em ${BIBLIO_NORMAS.length} categorias.</div>
   </div>
   <div id="normas_lista"></div>`;
   renderNormasLista();
@@ -2958,7 +2921,7 @@ function renderLaudos(){
   $('#main').innerHTML=header('Laudos Gerados','Histórico de laudos emitidos','')+`
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <div style="font-size:12px;color:#65708c">${LAUDOS.length} laudo(s) armazenado(s)</div>
+      <div style="font-size:12px;color:var(--muted)">${laudosVisiveisST().length} laudo(s) armazenado(s)</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-g" style="padding:7px 14px" onclick="exportarLaudos()">⬇️ Exportar backup (.json)</button>
         <button class="btn btn-g" style="padding:7px 14px" onclick="document.getElementById('imp_laudos').click()">⬆️ Importar backup</button>
@@ -2977,7 +2940,7 @@ function renderLaudos(){
 }
 function exportarLaudos(){
   if(!LAUDOS.length){alert('Não há laudos para exportar.');return;}
-  const backup={app:'ServicTest',tipo:'backup-laudos',versao:1,exportadoEm:new Date().toISOString(),total:LAUDOS.length,laudos:LAUDOS,clientes:CLIENTES};
+  const backup={app:'ServicTest',tipo:'backup-laudos',versao:2,normativeEngine:'2.0',exportadoEm:new Date().toISOString(),total:LAUDOS.length,laudos:LAUDOS,clientes:CLIENTES};
   const blob=new Blob([JSON.stringify(backup)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
