@@ -221,6 +221,8 @@ tr:hover td{background:var(--muted-bg)}
     </nav>
     <div class="side-foot">
       <div id="sfUsuario" style="color:#dbe3f5;font-weight:700;font-size:12px;margin-bottom:2px"></div>
+      <button id="btnSalvarNuvemST" onclick="syncSupabaseST()" title="Enviar tudo o que foi feito para a nuvem agora" style="width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#cfd7ec;border-radius:6px;padding:6px 8px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:4px">☁️ Salvar na nuvem</button>
+      <div id="sbStatusSide" style="font-size:10px;color:#8fa0c4;text-align:center;margin-bottom:8px">—</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
         <button id="btnTemaST" onclick="alternarTemaST()" title="Alternar tema claro/escuro (só para você)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#cfd7ec;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">🌙 Escuro</button>
       </div>
@@ -277,7 +279,7 @@ if(!CLIENTES){
   else CLIENTES=[];
   DB.set('clientes',CLIENTES);
 }
-function saveClientes(){DB.set('clientes',CLIENTES);}
+function saveClientes(){DB.set('clientes',CLIENTES); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
 // CAD = cliente ativo (em edição/uso). Mantém compatibilidade com todo o código existente.
 let CAD = CLIENTES[0] || novoClienteObj();
 (()=>{ const aid=DB.get('cadAtivoId',null); if(aid){ const c=CLIENTES.find(x=>x.id===aid); if(c) CAD=c; } })();
@@ -418,8 +420,8 @@ async function sbSession(){
   catch(e){ return null; }
 }
 function sbSetStatus(txt,cor){
-  const el=document.getElementById('sbStatus'); if(!el) return;
-  el.textContent=txt; el.style.color=cor||'var(--muted)';
+  const el=document.getElementById('sbStatus'); if(el){ el.textContent=txt; el.style.color=cor||'var(--muted)'; }
+  const el2=document.getElementById('sbStatusSide'); if(el2){ el2.textContent='☁️ '+txt; el2.style.color=cor||'#8fa0c4'; }
 }
 async function sbLogin(emailArg,senhaArg){
   const email=emailArg||(document.getElementById('cfg-sb-email')||{}).value||'';
@@ -505,12 +507,17 @@ async function sbFullSync(){
   } finally { SB.busy=false; }
 }
 function scheduleSupabaseSyncST(){
+  sbSetStatus('Alterações não salvas...','var(--warn)');
   clearTimeout(SB.timer);
   SB.timer=setTimeout(()=>{
     sbSession().then(session=>{
-      if(!session) return;
+      if(!session){ sbSetStatus('Não conectado','var(--fail)'); return; }
       SB.busy=true;
-      return sbPushState().catch(e=>{throw e;}).finally(()=>{SB.busy=false;});
+      sbSetStatus('Salvando na nuvem...','var(--warn)');
+      return sbPushState()
+        .then(()=>{ DB.set('sb_last_sync', new Date().toISOString()); sbSetStatus('Salvo ✓ '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),'var(--ok)'); })
+        .catch(e=>{ sbSetStatus('Não sincronizado','var(--fail)'); throw e; })
+        .finally(()=>{SB.busy=false;});
     }).catch(e=>console.warn('Falha na sincronização automática:',e&&e.message));
   },2500);
 }
@@ -744,14 +751,20 @@ function idbBulk(arr){
 }
 // Salva (persistência completa do array em memória, sem limite prático de espaço)
 function saveLaudos(){
-  if(!IDB.db){ try{DB.set('laudos',LAUDOS);}catch(e){} return; }
-  idbBulk(LAUDOS).catch(err=>{
-    console.warn('Falha ao salvar no IndexedDB, tentando localStorage:',err);
-    try{DB.set('laudos',LAUDOS);}catch(e){ alert('Não foi possível salvar o laudo. Verifique o espaço do navegador.'); }
-  });
+  if(!IDB.db){ try{DB.set('laudos',LAUDOS);}catch(e){} }
+  else{
+    idbBulk(LAUDOS).catch(err=>{
+      console.warn('Falha ao salvar no IndexedDB, tentando localStorage:',err);
+      try{DB.set('laudos',LAUDOS);}catch(e){ alert('Não foi possível salvar o laudo. Verifique o espaço do navegador.'); }
+    });
+  }
+  if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
 }
 // Persiste a exclusão de um laudo específico
-function persistDelLaudo(id){ if(IDB.db) idbDel(id).catch(()=>{}); else { try{DB.set('laudos',LAUDOS);}catch(e){} } }
+function persistDelLaudo(id){
+  if(IDB.db) idbDel(id).catch(()=>{}); else { try{DB.set('laudos',LAUDOS);}catch(e){} }
+  if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
+}
 // Inicializa: abre o IndexedDB, migra laudos antigos do localStorage (uma vez) e carrega
 async function initLaudos(){
   try{
@@ -909,7 +922,7 @@ function eqData(key){
   if(key==='spda') return d||{edif:'',altura:'',tipoSpda:'Não isolado (estrutural)',captacao:'Misto (natural + artificial)',arranjoAterr:'Tipo B (anel/malha perimetral)',instrumentos:[{tipo:'',cert:'',cal:'',venc:''}]};
   return d||{equip:'',tag:'',fab:'',serie:'',potencia:'',tensaoNom:'',instrumentos:[{tipo:'',cert:'',cal:'',venc:''}]};
 }
-function saveEqData(key,d){DB.set('eq_'+key,d);}
+function saveEqData(key,d){DB.set('eq_'+key,d); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
 function equipBlock(key){
   const d=eqData(key);
   const instr=(d.instrumentos&&d.instrumentos.length)?d.instrumentos:[{tipo:'',cert:'',cal:'',venc:''}];
@@ -1021,7 +1034,7 @@ function eqAddInstr(key){const d=eqCollect(key);d.instrumentos.push({tipo:'',cer
 
 /* ============ ENSAIO STATE LOADER ============ */
 function E(key,def){let s=DB.get('ens_'+key,null);return s||def;}
-function saveE(key,obj){DB.set('ens_'+key,obj);}
+function saveE(key,obj){DB.set('ens_'+key,obj); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
 let chartRef=null, chartRef2=null;
 function drawChart(id,cfg){if(chartRef)chartRef.destroy();chartRef=new Chart(document.getElementById(id),cfg);}
 function drawChart2(id,cfg){if(chartRef2)chartRef2.destroy();chartRef2=new Chart(document.getElementById(id),cfg);}
@@ -2784,6 +2797,7 @@ function importarTudo(input){
       novos.forEach(l=>{if(l&&l.id){map.has(l.id)?upd++:add++;map.set(l.id,l);}});
       LAUDOS=Array.from(map.values()).sort((a,b)=>(b.criadoTs||0)-(a.criadoTs||0));
       if(IDB.db)await idbBulk(LAUDOS);else try{DB.set('laudos',LAUDOS);}catch(_){}
+      if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
       // clientes
       let cli=0;
       if(d.clientes&&d.clientes.length){const cmap=new Map(CLIENTES.map(c=>[c.id,c]));d.clientes.forEach(c=>{if(c&&c.id&&!cmap.has(c.id)){cmap.set(c.id,c);cli++;}});CLIENTES=Array.from(cmap.values());saveClientes();}
@@ -3027,6 +3041,7 @@ function importarLaudos(input){
         CLIENTES=Array.from(cmap.values()); saveClientes();
       }
       if(IDB.db){ await idbBulk(LAUDOS); } else { try{DB.set('laudos',LAUDOS);}catch(_){} }
+      if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();
       alert('Backup importado: '+add+' novo(s), '+upd+' atualizado(s)'+(cliAdd?(' · '+cliAdd+' cliente(s)'):'')+'.');
       input.value=''; renderLaudos();
     }catch(err){ alert('Falha ao ler o arquivo de backup: '+err.message); input.value=''; }
