@@ -885,7 +885,8 @@ const RI_TIPO_NORMA={
   cabo:{tref:'0',crit:'man',norma:'IEC 60502 / IEC 60840 / IEC 62067, conforme tipo',rotulo:'Cabo — selecionar norma e tipo'},
   barra:{tref:'0',crit:'man',norma:'Procedimento/fabricante do barramento',rotulo:'Barramento'},
   tc:{tref:'20',crit:'man',norma:'IEC 61869 / ABNT aplicável',rotulo:'Transformador de corrente (TC)'},
-  tp:{tref:'20',crit:'man',norma:'IEC 61869 / ABNT aplicável',rotulo:'Transformador de potencial (TP)'}
+  tp:{tref:'20',crit:'man',norma:'IEC 61869 / ABNT aplicável',rotulo:'Transformador de potencial (TP)'},
+  isolador:{tref:'0',crit:'man',norma:'IEC 60383 / NBR 5032, conforme tipo',rotulo:'Isolador — selecionar norma e tipo'}
 };
 
 
@@ -1071,6 +1072,7 @@ const RI_DUR={
 const RI_NIVEIS={
   baixa:{lbl:'Baixa Tensão (R / S / T)',fases:['R','S','T'],massa:'massa (PE)'},
   media:{lbl:'Média Tensão (L1 / L2 / L3)',fases:['L1','L2','L3'],massa:'massa (terra)'},
+  media_abc:{lbl:'Média Tensão (A / B / C)',fases:['A','B','C'],massa:'massa (terra)'},
   trafo:{lbl:'Transformador (HV / LV)',fases:['HV','LV'],massa:'massa/tanque'}
 };
 function riCombos(nivel,modoMassa,modoFF){
@@ -1123,6 +1125,7 @@ function renderRI(){
           <option value="barra" ${s.tipoEq=='barra'?'selected':''}>Barramentos</option>
           <option value="tc" ${s.tipoEq=='tc'?'selected':''}>TC — Transformador de Corrente</option>
           <option value="tp" ${s.tipoEq=='tp'?'selected':''}>TP — Transformador de Potencial</option>
+          <option value="isolador" ${s.tipoEq=='isolador'?'selected':''}>Isolador</option>
         </select>
       </div>
       <div><label>Tensão de Teste (V)</label><select id="ri_tensao">${['500','1000','2500','5000','10000'].map(v=>`<option ${s.tensao==v?'selected':''}>${v}</option>`).join('')}</select></div>
