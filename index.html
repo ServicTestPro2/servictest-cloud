@@ -1,3 +1,9 @@
+<!--
+  © 2026 Vagner Rodrigues — Todos os direitos reservados.
+  Sistema proprietário (ServicTest). Cópia, redistribuição, engenharia
+  reversa comercial ou reaproveitamento deste código/layout/lógica de
+  ensaios sem autorização expressa do autor são proibidos.
+-->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -235,6 +241,8 @@ tr:hover td{background:var(--muted-bg)}
   <main class="main" id="main"></main>
 </div>
 <script>
+console.log('%c⚠ Sistema proprietário — ServicTest','font-size:15px;font-weight:bold;color:#c0392b');
+console.log('%c© 2026 Vagner Rodrigues. Todos os direitos reservados. Cópia, redistribuição ou reaproveitamento comercial deste código sem autorização são proibidos.','font-size:12px;color:#555');
 /* ============ ESTADO GLOBAL ============ */
 const DB = {
   get(k,d){try{return JSON.parse(localStorage.getItem('itest_'+k))??d}catch{return d}},
