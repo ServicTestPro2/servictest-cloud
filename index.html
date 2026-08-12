@@ -246,7 +246,8 @@ console.log('%c© 2026 Vagner Rodrigues. Todos os direitos reservados. Cópia, r
 /* ============ ESTADO GLOBAL ============ */
 const DB = {
   get(k,d){try{return JSON.parse(localStorage.getItem('itest_'+k))??d}catch{return d}},
-  set(k,v){localStorage.setItem('itest_'+k,JSON.stringify(v))}
+  set(k,v){localStorage.setItem('itest_'+k,JSON.stringify(v))},
+  remove(k){localStorage.removeItem('itest_'+k)}
 };
 const uid = ()=>'L'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*1000);
 // Paleta de tons suaves/claros para o tema do laudo (contraste mantido com texto branco)
@@ -943,11 +944,16 @@ function cadResumo(key){
   if(!CLIENTES.length || !CAD.cliente){
     return seletor + `<div class="hint">⚠ Selecione ou cadastre um cliente (aba <b>Clientes</b>) e preencha os dados antes de gerar laudos.</div>` + (key?equipBlock(key):'');
   }
-  const resumo=`<div class="hint">📌 Cliente: <b>${CAD.cliente}</b> · Obra: ${CAD.obra||'—'}</div>`;
+  const editLaudo=(key&&window._editandoLaudoId)?LAUDOS.find(x=>x.id===window._editandoLaudoId&&x.key===key):null;
+  const acaoEnsaio=!key?'':editLaudo
+    ? `<span style="color:#b8860b;font-weight:700">✏️ Editando: ${editLaudo.numero}</span> <button class="btn btn-g" style="padding:4px 10px;font-size:12px" onclick="cancelarEdicaoLaudo('${key}')">✕ Cancelar edição</button>`
+    : `<button class="btn btn-g" style="padding:5px 12px" onclick="novoEnsaio('${key}')">➕ Novo Ensaio</button>`;
+  const resumo=`<div class="hint" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>📌 Cliente: <b>${CAD.cliente}</b> · Obra: ${CAD.obra||'—'}</span>${acaoEnsaio}</div>`;
   return seletor + resumo + (key?equipBlock(key):'');
 }
 function trocaClienteEnsaio(key,id){
   if(id){ setClienteAtivo(id); }
+  window._editandoLaudoId=null;
   if(key && PAGES[key]) PAGES[key](); else renderCad();
 }
 /* Bloco de Equipamento + Instrumentos por ENSAIO (cada ensaio tem os seus) */
@@ -962,7 +968,7 @@ function equipBlock(key){
   const instr=(d.instrumentos&&d.instrumentos.length)?d.instrumentos:[{tipo:'',cert:'',cal:'',venc:''}];
   return `<div class="card" id="eqcard_${key}">
     <div class="grid g4" style="margin-bottom:6px">
-      <div><label>Nº do Laudo / Protocolo</label><input id="eq_numlaudo" value="${CAD.numeroLaudo||''}" oninput="eqSetNum(this.value)" placeholder="ex: INNOVA-2026-001 (vazio = automático)"></div>
+      <div><label>Nº do 1º Laudo deste tipo, neste cliente</label><input id="eq_numlaudo" value="${CAD.numeroLaudo||''}" oninput="eqSetNum(this.value)" placeholder="vazio = começa em -0001, auto. a partir daí"></div>
       <div><label>Data do Ensaio</label><input type="date" id="eq_data" value="${CAD.data||''}" onchange="eqSetData(this.value)"></div>
       <div><label>Temperatura Ambiente (°C)</label><input id="eq_temp" value="${CAD.temp||''}" oninput="eqSetTemp(this.value)"></div>
       <div><label>Umidade Relativa (%)</label><input id="eq_umid" value="${CAD.umid||''}" oninput="eqSetUmid(this.value)"></div>
@@ -1069,6 +1075,40 @@ function eqAddInstr(key){const d=eqCollect(key);d.instrumentos.push({tipo:'',cer
 /* ============ ENSAIO STATE LOADER ============ */
 function E(key,def){let s=DB.get('ens_'+key,null);return s||def;}
 function saveE(key,obj){DB.set('ens_'+key,obj); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
+function removeE(key){DB.remove('ens_'+key); if(typeof scheduleSupabaseSyncST==='function') scheduleSupabaseSyncST();}
+/* Rótulo de cada tipo de ensaio — usado na numeração automática de laudos (ex.: "Resistência de Isolamento-0001") */
+const LABEL_ENSAIO={
+  ri:'Resistência de Isolamento', rohm:'Resistência Ôhmica', rc:'Resistência de Contato',
+  fp:'Fator de Potência', dp:'Descargas Parciais', oleo:'Rigidez Dielétrica do Óleo',
+  ta:'Tensão Aplicada', rt:'Relação de Transformação', atr:'Resistência de Aterramento',
+  spda:'SPDA', ppc:'Ponto a Ponto de Cabos', motor:'Ficha de Motor',
+  mano:'Calibração de Manômetro', termo:'Calibração de Termômetro', transd:'Calibração de Transdutor',
+  press:'Calibração de Pressostato', nivel:'Calibração de Nível'
+};
+/* Próximo número de laudo, sequencial por CLIENTE (projeto) + TIPO de ensaio.
+   O primeiro laudo de um tipo, num projeto, usa o "Nº do Laudo/Protocolo" digitado
+   manualmente (CAD.numeroLaudo) se houver; senão começa em "<Rótulo>-0001". Os
+   próximos laudos do MESMO tipo, no MESMO projeto, seguem a sequência a partir daí,
+   preservando o prefixo/formato usado no primeiro. */
+function proximoNumeroLaudo(cadId,key){
+  const rotulo=LABEL_ENSAIO[key]||key;
+  const doMesmoTipo=LAUDOS.filter(l=>l.cadId===cadId&&l.key===key);
+  if(!doMesmoTipo.length){
+    const manual=(CAD.numeroLaudo||'').trim();
+    return manual||(rotulo+'-0001');
+  }
+  let maxSeq=0;
+  doMesmoTipo.forEach(l=>{
+    const m=String(l.numero||'').match(/(\d+)\s*$/);
+    if(m){const n=parseInt(m[1],10); if(!isNaN(n)&&n>maxSeq)maxSeq=n;}
+  });
+  const prox=maxSeq+1;
+  const primeiro=String(doMesmoTipo[0].numero||'');
+  const prefixMatch=primeiro.match(/^(.*?)(\d+)\s*$/);
+  const prefixo=prefixMatch?prefixMatch[1]:(rotulo+'-');
+  const digitos=prefixMatch?prefixMatch[2].length:4;
+  return prefixo+String(prox).padStart(digitos,'0');
+}
 let chartRef=null, chartRef2=null;
 function drawChart(id,cfg){if(chartRef)chartRef.destroy();chartRef=new Chart(document.getElementById(id),cfg);}
 function drawChart2(id,cfg){if(chartRef2)chartRef2.destroy();chartRef2=new Chart(document.getElementById(id),cfg);}
@@ -2525,10 +2565,53 @@ const ANALISE={
  dp:'As descargas parciais foram medidas em picocoulombs (pC) sob tensão aplicada, conforme IEC 60270, registrando-se o nível máximo de cada ponto. A aprovação considera o nível de descarga abaixo do limite especificado para o equipamento, sendo a intensidade um indicador da integridade da isolação.',
  oleo:'A rigidez dielétrica do óleo isolante foi determinada por ensaio de tensão de ruptura em conjunto de eletrodos padronizado, realizando-se sucessivas aplicações e calculando-se a média conforme IEC 60156. O valor médio foi comparado ao mínimo admissível para a classe de tensão do equipamento, indicando o nível de contaminação por umidade e partículas.'
 };
-/* Botão de laudo seguro: guarda o payload e dispara sem embutir JSON no HTML */
+/* Botão de laudo seguro: guarda o payload e dispara sem embutir JSON no HTML.
+   Se houver um laudo em edição (window._editandoLaudoId) para este mesmo tipo,
+   mostra "Salvar Alterações" em vez de "Gerar Laudo" — gerarLaudo() decide se
+   atualiza o laudo existente ou cria um novo. */
 function prepLaudoBtn(tipo,key,dados){
   window._laudoPend={tipo,key,dados};
-  return `<button class="btn btn-ok" onclick="dispararLaudo()">📄 Gerar Laudo</button>`;
+  const editando=window._editandoLaudoId?LAUDOS.find(x=>x.id===window._editandoLaudoId&&x.key===key):null;
+  return editando
+    ? `<button class="btn btn-ok" onclick="dispararLaudo()">💾 Salvar Alterações (Laudo ${editando.numero})</button> <button class="btn btn-g" onclick="cancelarEdicaoLaudo('${key}')">✕ Cancelar edição</button>`
+    : `<button class="btn btn-ok" onclick="dispararLaudo()">📄 Gerar Laudo</button>`;
+}
+function cancelarEdicaoLaudo(key){
+  window._editandoLaudoId=null;
+  if(key&&PAGES[key])PAGES[key]();
+}
+/* Limpa as leituras/resultados do ensaio atual (mantém equipamento/instrumentos,
+   já que normalmente é o mesmo dia/instrumento para o próximo item testado no
+   mesmo projeto) — usado pelo botão "➕ Novo Ensaio". */
+function novoEnsaio(key){
+  const rotulo=LABEL_ENSAIO[key]||key;
+  if(!confirm('Iniciar um novo ensaio de "'+rotulo+'"?\n\nOs valores digitados no formulário atual serão limpos. Laudo(s) já gerado(s) permanecem salvos na lista de Laudos.'))return;
+  removeE(key);
+  window._editandoLaudoId=null;
+  if(PAGES[key])PAGES[key]();
+}
+/* Carrega um laudo já gerado de volta no formulário do ensaio para edição.
+   Salvar (gerarLaudo) atualiza o MESMO laudo em vez de criar um novo. */
+function editarLaudo(id){
+  const l=LAUDOS.find(x=>x.id===id); if(!l){alert('Laudo não encontrado.');return;}
+  if(!confirm('Abrir o laudo "'+(l.numero||l.id)+'" para edição?\n\nOs dados salvos deste laudo serão carregados no formulário do ensaio.'))return;
+  setClienteAtivo(l.cadId);
+  // formState = formulário bruto (o que a pessoa digitou); dados = resultado já
+  // calculado. Laudos antigos (gerados antes desta função existir) não têm
+  // formState — nesse caso não há como recuperar os campos brutos, então cai
+  // para o estado padrão do ensaio em vez de carregar o "dados" errado.
+  if(l.formState) saveE(l.key,l.formState); else removeE(l.key);
+  if(l.snapshot){
+    saveEqData(l.key,{
+      equip:l.snapshot.equip,tag:l.snapshot.tag,fab:l.snapshot.fab,serie:l.snapshot.serie,
+      potencia:l.snapshot.potencia,tensaoNom:l.snapshot.tensaoNom,edif:l.snapshot.edif,altura:l.snapshot.altura,
+      tipoSpda:l.snapshot.tipoSpda,captacao:l.snapshot.captacao,arranjoAterr:l.snapshot.arranjoAterr,
+      imgDiagrama:l.snapshot.imgDiagrama||'',tema:l.snapshot.tema,obs:l.snapshot.obs||'',
+      instrumentos:l.snapshot.instrumentos&&l.snapshot.instrumentos.length?l.snapshot.instrumentos:[{tipo:'',cert:'',cal:'',venc:''}]
+    });
+  }
+  window._editandoLaudoId=id;
+  if(PAGES[l.key])PAGES[l.key](); else go(l.key);
 }
 function dispararLaudo(){
   const p=window._laudoPend; if(!p){alert('Avalie o ensaio antes de gerar o laudo.');return;}
@@ -2537,8 +2620,10 @@ function dispararLaudo(){
 }
 function gerarLaudo(tipo,key,dados){
   if(!CAD.cliente){alert('Preencha os Dados Cliente / Obra primeiro.');go('cad');return;}
-  const id=uid();
-  const numero=(CAD.numeroLaudo&&CAD.numeroLaudo.trim())?CAD.numeroLaudo.trim():id;
+  const editId=window._editandoLaudoId;
+  const editando=editId?LAUDOS.find(x=>x.id===editId&&x.key===key):null;
+  const id=editando?editando.id:uid();
+  const numero=editando?editando.numero:proximoNumeroLaudo(CAD.id,key);
   const chartImg = chartRef? compactChartImg(chartRef):null;
   const chartImg2 = chartRef2? compactChartImg(chartRef2):null;
   // snapshot global + sobrescreve equipamento/instrumentos com os DESTE ensaio
@@ -2555,11 +2640,25 @@ function gerarLaudo(tipo,key,dados){
     tipoSpda:eq.tipoSpda, captacao:eq.captacao, arranjoAterr:eq.arranjoAterr, imgDiagrama:eq.imgDiagrama||'',
     tema:eq.tema||CAD.tema, obs:eq.obs||'',
     instrumentos:(eq.instrumentos&&eq.instrumentos.filter(i=>i.tipo).length)?eq.instrumentos:CAD.instrumentos};
-  const laudo={id,numero,tipo,key,dados,status:dados.status,chartImg,chartImg2,
+  // `dados` é o resultado JÁ CALCULADO (o que aparece no laudo impresso), não o
+  // formulário bruto — cada ensaio grava seu próprio estado bruto em ens_<key>
+  // (via saveE) como primeiro passo da função de Calcular, então neste momento
+  // E(key,null) é exatamente os valores digitados que geraram este resultado.
+  // Guardamos isso à parte (formState) para permitir reabrir e editar depois.
+  const formState=E(key,null);
+  const laudo={id,numero,tipo,key,dados,formState,status:dados.status,chartImg,chartImg2,
     cadId:CAD.id,cliente:CAD.cliente,obra:CAD.obra,equip:snap.equip,tag:snap.tag,
-    data:CAD.data,criadoEm:new Date().toLocaleString('pt-BR'),criadoTs:Date.now(),snapshot:snap,
-    criadoPor:currentUser||''};
-  LAUDOS.push(laudo);saveLaudos();
+    data:CAD.data,
+    criadoEm:editando?editando.criadoEm:new Date().toLocaleString('pt-BR'),
+    criadoTs:editando?editando.criadoTs:Date.now(),
+    editadoEm:editando?new Date().toLocaleString('pt-BR'):undefined,
+    editadoPor:editando?(currentUser||''):undefined,
+    snapshot:snap,
+    criadoPor:editando?editando.criadoPor:(currentUser||'')};
+  if(editando){ LAUDOS[LAUDOS.findIndex(x=>x.id===id)]=laudo; }
+  else { LAUDOS.push(laudo); }
+  window._editandoLaudoId=null;
+  saveLaudos();
   abrirLaudo(id);
 }
 
@@ -2933,7 +3032,7 @@ function renderLaudosTabela(){
   const list=laudosFiltrados();
   cont.innerHTML = list.length?`<table><thead><tr><th>Nº</th><th>Ensaio</th><th>Cliente</th><th>Equip.</th><th>Data</th><th>Resultado</th><th>Ações</th></tr></thead><tbody>
     ${list.map(l=>`<tr><td>${l.numero||l.id}</td><td>${l.tipo}</td><td>${l.cliente}</td><td>${l.equip||'—'}</td><td>${l.data}</td><td>${tag(l.status)}</td>
-      <td style="white-space:nowrap"><button class="btn btn-g" style="padding:6px 12px" onclick="abrirLaudo('${l.id}')">📄 Abrir</button> <button class="btn btn-ok" style="padding:6px 12px" onclick="baixarPdfLaudo('${l.id}')">⬇️ PDF</button> <button class="btn btn-g" style="padding:6px 10px" onclick="delLaudo('${l.id}')">🗑</button></td></tr>`).join('')}
+      <td style="white-space:nowrap"><button class="btn btn-g" style="padding:6px 12px" onclick="abrirLaudo('${l.id}')">📄 Abrir</button> <button class="btn btn-g" style="padding:6px 12px" onclick="editarLaudo('${l.id}')">✏️ Editar</button> <button class="btn btn-ok" style="padding:6px 12px" onclick="baixarPdfLaudo('${l.id}')">⬇️ PDF</button>${isAdminST()?` <button class="btn btn-g" style="padding:6px 10px" onclick="delLaudo('${l.id}')">🗑</button>`:''}</td></tr>`).join('')}
     </tbody></table>`
     : `<div class="sub" style="padding:14px 0">${LAUDOS.length?'Nenhum laudo corresponde ao filtro.':'Nenhum laudo gerado. Realize um ensaio e clique em “Gerar Laudo”.'}</div>`;
 }
@@ -3145,13 +3244,19 @@ function importarLaudos(input){
   };
   reader.readAsText(file);
 }
+/* Exclusão de laudo é irreversível e por isso restrita: somente o usuário
+   Administrador, e mesmo assim só depois de redigitar a própria senha no
+   momento da exclusão (reautenticação) — evita exclusão acidental por clique
+   ou por sessão de admin deixada aberta. */
 function delLaudo(id){
-  const idsPermDel=_idsClientesVisiveis();
-  if(idsPermDel){
-    const l0=LAUDOS.find(x=>x.id===id);
-    if(!l0 || !l0.cadId || !idsPermDel.includes(String(l0.cadId))){ alert('⛔ Você não tem permissão para excluir este laudo.'); return; }
-  }
-  if(!confirm('Excluir laudo '+id+'?'))return;LAUDOS=LAUDOS.filter(l=>l.id!==id);persistDelLaudo(id);renderLaudos();
+  if(!isAdminST()){ alert('⛔ Somente o Administrador pode excluir laudos.'); return; }
+  const l=LAUDOS.find(x=>x.id===id); if(!l){alert('Laudo não encontrado.');return;}
+  const senha=prompt('Digite a senha de Administrador para excluir o laudo "'+(l.numero||id)+'":');
+  if(senha==null)return;
+  const usr=USUARIOS.find(u=>u.user.toLowerCase()===(currentUser||'').toLowerCase());
+  if(!usr||usr.pass!==senha){ alert('❌ Senha incorreta. Exclusão cancelada.'); return; }
+  if(!confirm('Confirma a exclusão definitiva do laudo "'+(l.numero||id)+'"?\n\nEsta ação não pode ser desfeita.'))return;
+  LAUDOS=LAUDOS.filter(x=>x.id!==id);persistDelLaudo(id);renderLaudos();
 }
 
 /* ============ INIT ============ */
