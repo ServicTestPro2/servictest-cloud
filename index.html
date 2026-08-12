@@ -1091,7 +1091,7 @@ function riMinValor(crit,kv,manVal){
   return num(manVal);
 }
 function riCritTxt(crit,kv){
-  if(crit==='kvrule') return kv!=null?`≥ ${fmt(1+kv,1)} MΩ — IEEE 43-2013, kV+1 (somente quando aplicável ao enrolamento)`:'IEEE 43-2013: kV+1 MΩ — informe tensão nominal e confirme aplicabilidade';
+  if(crit==='kvrule') return kv!=null?`≥ ${fmt(1+kv,1)} MΩ (${fmt(kv,1)} kV + 1 MΩ) — IEEE 43-2013, kV+1 (somente quando aplicável ao enrolamento)`:'IEEE 43-2013: kV+1 MΩ — informe tensão nominal e confirme aplicabilidade';
   if(crit==='ieee5') return '≥ 5 MΩ — IEEE 43-2013, para máquinas/estatores nos casos previstos na norma';
   if(crit==='ieee100') return '≥ 100 MΩ — IEEE 43-2013, para enrolamentos AC form-wound nos casos previstos na norma';
   return 'Critério manual / fabricante / procedimento específico';
@@ -2430,9 +2430,10 @@ function analiseRI(d){
   // descrição do critério, adaptada ao tipo de equipamento
   let critDesc;
   if(d.crit==='kvrule'){
+    const kvTxt = d.kvNom!=null ? fmt(d.kvNom,1)+' kV' : 'a tensão nominal informada';
     critDesc = isMaq
-      ? 'o critério da regra 1 MΩ/kV (resistência mínima = tensão nominal em kV + 1 MΩ), aplicável a enrolamentos de máquinas rotativas conforme IEEE 43'
-      : 'o critério da regra 1 MΩ/kV (resistência mínima = tensão nominal em kV + 1 MΩ) como referência mínima de isolamento';
+      ? `o critério kV+1 (resistência mínima = ${kvTxt} + 1 MΩ), aplicável a enrolamentos de máquinas rotativas conforme IEEE 43 quando cabível à classe/construção do enrolamento`
+      : `o critério kV+1 (resistência mínima = ${kvTxt} + 1 MΩ) como referência mínima de isolamento`;
   } else if(d.crit==='ieee100'){
     critDesc = isMaq
       ? 'o critério de 100 MΩ mínimos, aplicável a bobinas form-wound modernas, conforme IEEE 43:2013'
@@ -2445,7 +2446,10 @@ function analiseRI(d){
   const alvo = d.critTxt ? (' ('+d.critTxt+')') : '';
   // tempos efetivamente medidos
   const tlist = (d.times&&d.times.length)? d.times.join(', ') : '30 s, 60 s e 10 min';
-  const temPI = d.times && d.times.includes('1min') && d.times.includes('10min');
+  // PI foi de fato calculado se alguma linha tem PI numérico (fonte da verdade:
+  // o resultado real, não uma suposição sobre quais tempos foram configurados —
+  // "60s" é o ponto de 1 minuto neste sistema, nunca aparece como "1min").
+  const temPI = Array.isArray(d.linhas) ? d.linhas.some(l=>l.PI!=null) : (d.times && d.times.includes('60s') && d.times.includes('10min'));
   const indices = temPI
     ? 'Calcularam-se o Índice de Polarização (PI = R10min/R1min) e a Razão de Absorção Dielétrica (DAR = R60s/R30s).'
     : 'Calculou-se a Razão de Absorção Dielétrica (DAR = R60s/R30s); o Índice de Polarização (PI) não foi calculado por não terem sido realizadas leituras de 1 e 10 minutos.';
@@ -2455,21 +2459,21 @@ function analiseRI(d){
   return tipoFrase+'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão contínua entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em '+tlist+'. '+indices+' '+corr+' A aprovação considerou '+critDesc+alvo+', avaliando o pior caso entre as fases.';
 }
 const ANALISE={
- ri:'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão CC entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em 30 s, 60 s e 10 min. A partir dessas leituras calculou-se o Índice de Polarização (PI = R10min/R1min) e a Razão de Absorção Dielétrica (DAR = R60s/R30s). Quando a correção de temperatura é aplicada, a resistência é referida à temperatura especificada pelo procedimento (40 °C para a comparação IEEE 43 de máquinas rotativas, quando aplicável) (a cada 10 °C de variação a resistência dobra/reduz pela metade); caso contrário, são considerados os valores medidos. A aprovação considera o pior caso entre as fases, comparando a resistência ao valor mínimo adotado e PI/DAR aos limites normativos (PI ≥ 2; DAR ≥ 1,25).',
- rohm:'A resistência ôhmica dos enrolamentos foi medida em corrente contínua por método de queda de tensão (ponte/microhmímetro) em cada par de fases. Calculou-se o desbalanço percentual entre fases [(Rmáx−Rmín)/Rméd ×100], comparado ao limite típico de 2% conforme NBR 5356-1, com valores referenciados à temperatura de medição.',
+ ri:'Os valores de resistência de isolamento foram obtidos por megôhmetro aplicando tensão CC entre cada fase e a massa (e entre fases, quando aplicável), com leituras temporizadas em 15 s, 30 s, 60 s, 2 min, 5 min e 10 min (conforme a duração selecionada). A partir dessas leituras calculou-se a Razão de Absorção Dielétrica (DAR = R60s/R30s, informativa) e, quando aplicável a máquinas rotativas, o Índice de Polarização (PI = R10min/R1min). Quando a correção de temperatura é aplicada, a resistência é referida à temperatura especificada pelo procedimento (40 °C para a comparação IEEE 43 de máquinas rotativas, quando aplicável) (a cada 10 °C de variação a resistência dobra/reduz pela metade); caso contrário, são considerados os valores medidos. A aprovação considera o pior caso entre as fases, comparando a resistência (sempre pelo valor de R1min) ao critério mínimo adotado; PI só é usado como critério automático de aprovação/reprovação para máquina rotativa quando o procedimento/classe do enrolamento o justificar — do contrário, é apenas informativo.',
+ rohm:'A resistência ôhmica dos enrolamentos foi medida em corrente contínua por método de queda de tensão (ponte/microhmímetro) em cada par de fases. Calculou-se o desbalanço percentual entre fases [(Rmáx−Rmín)/Rméd ×100], comparado ao limite definido pelo fabricante, relatório de fábrica, histórico ou procedimento aplicável (2% é apenas uma referência de mercado comum, não um requisito normativo universal), com valores referenciados à temperatura de medição.',
  rc:'A resistência de contato foi medida em corrente contínua (≥100 A, método DLRO) em cada polo/contato. Os valores obtidos foram comparados ao limite máximo especificado pelo fabricante para o equipamento, sendo reprovado o polo cuja resistência supere o limite.',
  ta:'O ensaio de tensão aplicada (Hi-Pot) foi executado elevando a tensão de forma progressiva, em incrementos iguais por minuto, até atingir o valor de prova no minuto final, registrando-se a corrente de fuga por fase a cada minuto. Conforme NBR 5356-3 / IEC 60076-3, o ensaio é aprovado quando não ocorre disrupção, arco ou descarga e a corrente de fuga permanece baixa e estável. A elevação da corrente acompanhando o aumento da tensão é esperada e não indica defeito; a avaliação de estabilidade concentra-se na fase final do ensaio, com a tensão próxima do valor pleno. Sinaliza-se atenção somente quando a corrente atinge níveis elevados e mantém crescimento sustentado nesse período, indicando possível degradação do isolamento.',
  rt:'A relação de transformação foi medida com TTR em todas as derivações e fases. O desvio percentual entre a relação medida e a relação teórica (nominal) foi calculado e comparado ao limite definido para o transformador/TAP pelo fabricante e procedimento aplicável.',
  atr:'A resistência de aterramento foi medida pelo método da queda de potencial (regra dos 62%) com terrômetro. O valor obtido foi comparado ao critério específico da instalação e do projeto, sem usar 10 Ω/5 Ω como limite universal.',
  spda:'Conforme a NBR 5419:2026, o ensaio principal do SPDA é a verificação da continuidade elétrica das conexões, descidas e captores, realizada com mili/micro-ohmímetro, sendo a conformidade determinada pelo procedimento e pela documentação aplicável; não se usa 1,0 Ω como limite universal. A avaliação considerou o nível de proteção e a integridade/equipotencialização do sistema, além da identificação de pontos destoantes que indiquem conexões deficientes.',
  ppc:'A verificação ponto a ponto dos cabos foi realizada por continuidade elétrica e conferência documental/visual, comparando identificação (número/revisão), formação, tipo, condutores ocupados, extremidades (De/Para), função e percurso de cada cabo com a lista de cabos do projeto executivo. Cada cabo foi classificado individualmente como conforme, não conforme ou pendente de verificação, sendo a aprovação do ensaio condicionada à conformidade de todos os cabos avaliados.',
- motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s) e IP (R10min/R1min); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada às faixas da ISO 20816 conforme porte e montagem; e equilíbrio de corrente entre fases. A aprovação exige IP≥2, IA≥1,25, vibração dentro da faixa admissível e desbalanço de corrente dentro do limite.',
+ motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s, informativo) e IP (R10min/R1min, comparado a 2,0 como referência de classes B/F/H — não um requisito universal); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada ao limite do tipo/porte/montagem da máquina conforme ISO 20816; e desbalanço de corrente entre fases pelo desvio máximo em relação à média. A aprovação considera IP, vibração e desbalanço de corrente apenas quando um critério foi de fato definido para cada um — sem critério, o item fica informativo/inconclusivo, não aprovado por padrão.',
  mano:'A calibração do manômetro foi realizada por comparação com padrão rastreável em pontos crescentes e decrescentes da faixa. Calcularam-se o erro percentual referido ao fundo de escala e a histerese (diferença entre as curvas), comparados à classe de exatidão do instrumento conforme NBR ISO/IEC 17025.',
  termo:'O termômetro/sensor PT-100 foi verificado por comparação com padrão rastreável em pontos de referência definidos. O erro em °C de cada ponto foi calculado e comparado à tolerância da classe (PT-100 Classe A/B conforme IEC 60751).',
  transd:'O transdutor foi verificado por loop test ao longo do span (sinal 4–20 mA ou equivalente) nos pontos de referência. O erro percentual do span foi calculado e comparado à exatidão especificada do transmissor (IEC 62828-1:2026).',
- press:'O pressostato foi verificado quanto aos pontos de atuação (setpoint de alarme e de disparo), registrando-se a pressão real de comutação. O erro relativo em relação ao setpoint foi calculado e comparado à tolerância de projeto.',
+ press:'O pressostato foi verificado quanto aos pontos de atuação (setpoint de alarme e de disparo), registrando-se a pressão real de comutação. O erro absoluto (atuação − setpoint) foi calculado e comparado à tolerância de projeto — evita-se o erro percentual do setpoint, que se distorce quando o setpoint está próximo de zero.',
  nivel:'O instrumento de nível foi verificado por loop test nos pontos percentuais de referência, calculando-se o erro em relação ao valor esperado e comparando-o à exatidão especificada (IEC 62828-1:2026).',
- fp:'O fator de potência da isolação (tangente delta) foi medido em ponte de capacitância, registrando-se a capacitância e o fator de dissipação de cada medição. Os valores foram comparados ao histórico do equipamento e ao limite típico admissível, referidos a 20 °C, servindo como indicador de umidade e envelhecimento da isolação conforme IEEE C57.152 / IEC 60137.',
+ fp:'O fator de potência da isolação (tangente delta) foi medido em ponte de capacitância, registrando-se a capacitância e o fator de dissipação de cada medição. Os valores foram comparados ao limite definido pelo fabricante, norma/procedimento específico e/ou histórico do equipamento, referidos a 20 °C, servindo como indicador de umidade e envelhecimento da isolação conforme IEEE C57.152 / IEC 60137.',
  dp:'As descargas parciais foram medidas em picocoulombs (pC) sob tensão aplicada, conforme IEC 60270, registrando-se o nível máximo de cada ponto. A aprovação considera o nível de descarga abaixo do limite especificado para o equipamento, sendo a intensidade um indicador da integridade da isolação.',
  oleo:'A rigidez dielétrica do óleo isolante foi determinada por ensaio de tensão de ruptura em conjunto de eletrodos padronizado, realizando-se sucessivas aplicações e calculando-se a média conforme IEC 60156. O valor médio foi comparado ao mínimo admissível para a classe de tensão do equipamento, indicando o nível de contaminação por umidade e partículas.'
 };
@@ -2491,9 +2495,14 @@ function gerarLaudo(tipo,key,dados){
   const chartImg2 = chartRef2? compactChartImg(chartRef2):null;
   // snapshot global + sobrescreve equipamento/instrumentos com os DESTE ensaio
   const eq=eqData(key);
+  // Se nem o bloco de equipamento nem o cadastro do cliente tiverem a tensão
+  // nominal preenchida, mas o próprio ensaio usou uma (ex.: RI no critério
+  // kV+1), usa esse valor — evita o laudo mostrar "—" na tensão nominal
+  // enquanto o critério mínimo já foi calculado a partir dela.
+  const kvFallback = dados && dados.kvNom!=null ? String(dados.kvNom) : '';
   const snap={...CAD,
     equip:eq.equip||CAD.equip, tag:eq.tag||CAD.tag, fab:eq.fab||CAD.fab,
-    serie:eq.serie||CAD.serie, potencia:eq.potencia||CAD.potencia, tensaoNom:eq.tensaoNom||CAD.tensaoNom,
+    serie:eq.serie||CAD.serie, potencia:eq.potencia||CAD.potencia, tensaoNom:eq.tensaoNom||CAD.tensaoNom||kvFallback,
     edif:eq.edif, altura:eq.altura,
     tipoSpda:eq.tipoSpda, captacao:eq.captacao, arranjoAterr:eq.arranjoAterr, imgDiagrama:eq.imgDiagrama||'',
     tema:eq.tema||CAD.tema, obs:eq.obs||'',
@@ -2646,7 +2655,7 @@ function laudoBuild(id){
   <div class="ttl">LAUDO DE ENSAIO — ${l.tipo.toUpperCase()}</div>
   <div class="sec">Dados do Cliente e da Obra</div>
   <div class="grid2"><table class="kv"><tr><td>Cliente</td><td>${c.cliente}</td></tr><tr><td>CNPJ</td><td>${c.cnpjCli||'—'}</td></tr><tr><td>Obra</td><td>${c.obra||'—'}</td></tr><tr><td>Local</td><td>${c.local||'—'}</td></tr></table>
-  <table class="kv"><tr><td>Cidade/UF</td><td>${c.cidade||'—'}</td></tr><tr><td>Data ensaio</td><td>${c.data}</td></tr><tr><td>Temperatura</td><td>${c.temp} °C</td></tr><tr><td>Umidade</td><td>${c.umid} %</td></tr></table></div>
+  <table class="kv"><tr><td>Cidade/UF</td><td>${c.cidade||'—'}</td></tr><tr><td>Data ensaio</td><td>${c.data}</td></tr><tr><td>Temperatura ambiente</td><td>${c.temp} °C</td></tr><tr><td>Umidade</td><td>${c.umid} %</td></tr></table></div>
   ${l.key!=='ppc'?`
   <div class="sec">${l.key==='spda'?'Edificação / Instalação':'Equipamento Sob Ensaio'}</div>
   ${l.key==='spda'?`
