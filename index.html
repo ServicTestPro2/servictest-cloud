@@ -2456,6 +2456,17 @@ const NORMAS={
  dp:{n:'IEC 60270 / norma específica do equipamento',c:'IEC 60270 define o método de medição. Limites em pC dependem do equipamento, ensaio e especificação; não usar 500 pC universal.'},
  oleo:{n:'IEC 60156:2025 / norma e procedimento do equipamento',c:'Determinação da tensão de ruptura dielétrica em frequência de potência. Registrar cada ruptura; a média é estatística e não substitui critério de aceitação específico.'}
 };
+/* RI: a IEEE 43-2013 é específica para máquinas rotativas (motor/gerador) — para os
+   demais tipos de equipamento (trafo/cabo/barra/TC/TP/isolador) não deve ser citada
+   como a norma do ensaio; usa-se a norma de referência já definida em RI_TIPO_NORMA. */
+function riNormaTexto(d){
+  const ti=d&&d.tipoEq?RI_TIPO_NORMA[d.tipoEq]:null;
+  if(!ti||ti.tref==='40') return NORMAS.ri;
+  return {
+    n:'Norma e procedimento específicos do equipamento',
+    c:'IEEE 43-2013 é específica para máquinas rotativas e não se aplica a este tipo de equipamento. O critério de IR mínima e a eventual correção de temperatura seguem a norma/procedimento indicados abaixo. PI = R10/R1; DAR = R60/R30, quando medidos.'
+  };
+}
 
 /* Texto de análise/metodologia por ensaio: descreve como os valores foram obtidos e o critério aplicado */
 /* Análise/metodologia de RI gerada dinamicamente conforme critério e correção escolhidos */
@@ -2554,7 +2565,7 @@ function gerarLaudo(tipo,key,dados){
 
 function laudoBuild(id){
   const l=LAUDOS.find(x=>x.id===id);if(!l)return null;
-  const c=l.snapshot,nm=NORMAS[l.key];const d=l.dados;
+  const c=l.snapshot;const d=l.dados;const nm=l.key==='ri'?riNormaTexto(d):NORMAS[l.key];
   let an=ANALISE[l.key]||'';
   if(l.key==='ri'){ an=analiseRI(d); }
   let corpo='';
