@@ -880,6 +880,9 @@ function pctErr(meas,ref,span){return meas==null||ref==null||span==null||span===
 function maxAbs(vals){const a=vals.filter(v=>v!=null).map(Math.abs);return a.length?Math.max(...a):null;}
 function tempFactor(tempC,refC=40){if(tempC==null||refC==null)return 1;return Math.pow(2,(tempC-refC)/10);}
 function corrigeTemp(ri,tempC,ref=40){if(ri==null||tempC==null||ref==null||!isFinite(tempC)||!isFinite(ref))return ri;return ri*tempFactor(tempC,ref);}
+/* Converte uma leitura de megôhmetro (em kΩ/MΩ/GΩ/TΩ) para MΩ, unidade padrão do ensaio de RI */
+const RI_UNIDADE_FATOR={K:1/1000,M:1,G:1000,T:1000000};
+function riConverteMOhm(valor,unidade){const n=num(valor);if(n==null||!isFinite(n))return null;return n*(RI_UNIDADE_FATOR[unidade]||1);}
 function currentUnbalance(a,b,c){const vals=[a,b,c].filter(v=>v!=null);if(vals.length!==3)return null;const avg=vals.reduce((x,y)=>x+y,0)/3;return avg===0?null:Math.max(...vals.map(v=>Math.abs(v-avg)))/avg*100;}
 function decisionFromTolerance(errAbs,tol){if(errAbs==null||tol==null)return 'INCONCLUSIVO';return errAbs<=tol?'APROVADO':'REPROVADO';}
 function safeCriterionText(source,limit,unit){return source?(limit!=null?`${source}: ${limit} ${unit||''}`:source):'Critério não informado — definir por norma/procedimento/fabricante.';}
@@ -1094,6 +1097,10 @@ function riCombos(nivel,modoMassa,modoFF){
   return out;
 }
 function riLeituraVazia(dur){return RI_DUR[dur].times.reduce((o,t)=>(o[t]='',o),{});}
+/* Seletor de unidade por leitura — cada célula pode vir em kΩ/MΩ/GΩ/TΩ (megôhmetro pode mudar de faixa durante o mesmo ensaio) */
+function riUnitSelectHTML(i,t,u){
+  return `<select class="ri_unit" data-c="${i}" data-t="${t}" style="width:100%;min-width:44px;font-size:10px;padding:1px 2px;margin-top:2px" title="Unidade da leitura">${['K','M','G','T'].map(x=>`<option value="${x}" ${(u||'M')===x?'selected':''}>${x}Ω</option>`).join('')}</select>`;
+}
 function riMinValor(crit,kv,manVal){
   if(crit==='kvrule') return kv!=null ? (1+kv) : null; // IEEE 43: somente para classes em que kV+1 é aplicável
   if(crit==='ieee5') return 5;
@@ -1108,17 +1115,25 @@ function riCritTxt(crit,kv){
 }
 function renderRI(){
   const def={tensao:'5000',dur:'pi',temp:CAD.temp,tref:'0',tipoEq:'',tensaoNom:CAD.tensaoNom||'',crit:'kvrule',
-    nivel:'media',modoMassa:true,modoFF:false,leituras:{}};
+    nivel:'media',modoMassa:true,modoFF:false,leituras:{},unidades:{}};
   const s=E('ri',def);
   ['dur','tref','crit','nivel'].forEach(k=>{if(!s[k])s[k]=def[k];});
   if(s.modoMassa===undefined)s.modoMassa=true; if(s.modoFF===undefined)s.modoFF=false;
   if(!s.leituras)s.leituras={};
+  if(!s.unidades)s.unidades={};
   const kvNom=num(s.tensaoNom!==''?s.tensaoNom:CAD.tensaoNom);
   const minAuto=riMinValor(s.crit,kvNom,s.minMOhm); const isMan=s.crit==='man';
   const combos=riCombos(s.nivel,s.modoMassa,s.modoFF);
   const times=RI_DUR[s.dur].times;
-  // garante estrutura de leituras
-  combos.forEach(c=>{if(!s.leituras[c])s.leituras[c]=riLeituraVazia(s.dur); times.forEach(t=>{if(s.leituras[c][t]===undefined)s.leituras[c][t]='';});});
+  // garante estrutura de leituras/unidades (unidade padrão MΩ — compatível com laudos já salvos)
+  combos.forEach(c=>{
+    if(!s.leituras[c])s.leituras[c]=riLeituraVazia(s.dur);
+    if(!s.unidades[c])s.unidades[c]={};
+    times.forEach(t=>{
+      if(s.leituras[c][t]===undefined)s.leituras[c][t]='';
+      if(!s.unidades[c][t])s.unidades[c][t]='M';
+    });
+  });
   $('#main').innerHTML=header('Resistência de Isolamento','Megôhmetro · medição por fase (fase-massa e fase-fase)','IEEE 43 / NBR 5383')+cadResumo('ri')+`
   <div class="card">
     <h3>🛡️ Parâmetros do Ensaio</h3>
@@ -1164,18 +1179,18 @@ function renderRI(){
     <div class="divider"></div>
     <h3>📈 Leituras (MΩ) — uma linha por combinação</h3>
     ${s.tref==='0'||s.tref==0
-      ? `<div class="hint" style="margin-bottom:6px">Valores <b>medidos</b> (sem correção de temperatura). Use o seletor "Temperatura de Correção" para corrigir a 20 °C.</div>
+      ? `<div class="hint" style="margin-bottom:6px">Valores <b>medidos</b> (sem correção de temperatura, com unidade kΩ/MΩ/GΩ/TΩ por leitura). Use o seletor "Temperatura de Correção" para corrigir a 20 °C. <b>Qualquer leitura em kΩ reprova o ensaio imediatamente.</b></div>
     <div style="overflow-x:auto">
     <table><thead><tr><th>Combinação</th>${times.map(t=>`<th>${t}</th>`).join('')}</tr></thead>
-    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:70px"></td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:70px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`
-      : `<div class="hint" style="margin-bottom:6px">Em cada tempo: <b>Lido</b> (valor medido, editável) e <b>Corr.</b> (corrigido para ${s.tref}°C pela IEEE 43, preenchido ao Calcular).</div>
+      : `<div class="hint" style="margin-bottom:6px">Em cada tempo: <b>Lido</b> (valor medido, editável, com unidade kΩ/MΩ/GΩ/TΩ) e <b>Corr.</b> (corrigido para ${s.tref}°C pela IEEE 43, preenchido ao Calcular). <b>Qualquer leitura em kΩ reprova o ensaio imediatamente.</b></div>
     <div style="overflow-x:auto">
     <table><thead>
       <tr><th rowspan="2" style="vertical-align:middle">Combinação</th>${times.map(t=>`<th colspan="2" style="text-align:center">${t}</th>`).join('')}</tr>
       <tr>${times.map(()=>`<th style="font-size:9px;text-align:center">Lido</th><th style="font-size:9px;text-align:center;background:var(--muted-bg)">Corr. ${s.tref}°</th>`).join('')}</tr>
     </thead>
-    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px"></td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:var(--muted-bg2);color:var(--blue);font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:var(--muted-bg2);color:var(--blue);font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`}
     <div class="btn-row"><button class="btn btn-p" onclick="calcRI()">⚙ Calcular</button></div>
   </div>
@@ -1188,14 +1203,21 @@ function riColeta(){
   combos.forEach((c,i)=>{leituras[c]={}; times.forEach(t=>{const el=document.querySelector(`.ri_cell[data-c="${i}"][data-t="${t}"]`); leituras[c][t]=el?el.value:'';});});
   return leituras;
 }
+function riColetaUnidades(){
+  const combos=window._riCombos||[]; const dur=$('#ri_dur').value; const times=RI_DUR[dur].times;
+  const unidades={};
+  combos.forEach((c,i)=>{unidades[c]={}; times.forEach(t=>{const el=document.querySelector(`.ri_unit[data-c="${i}"][data-t="${t}"]`); unidades[c][t]=el?el.value:'M';});});
+  return unidades;
+}
 function riSalvaEstado(extra){
-  const s=E('ri',{}); 
+  const s=E('ri',{});
   s.tensao=$('#ri_tensao').value; s.dur=$('#ri_dur').value; s.nivel=$('#ri_nivel').value;
   s.tref=$('#ri_tref').value; s.temp=$('#ri_temp').value; s.tensaoNom=$('#ri_kv').value;
   s.crit=$('#ri_crit').value; s.minMOhm=$('#ri_min').value;
   s.tipoEq=$('#ri_tipoEq')?$('#ri_tipoEq').value:(s.tipoEq||'');
   s.modoMassa=$('#ri_mm').checked; s.modoFF=$('#ri_ff').checked;
   s.leituras=riColeta();
+  s.unidades=riColetaUnidades();
   Object.assign(s,extra||{});
   saveE('ri',s); return s;
 }
@@ -1218,34 +1240,38 @@ function updRiMin(){
 function calcRI(){
   const temp=num($('#ri_temp').value), tref=num($('#ri_tref').value), dur=$('#ri_dur').value;
   const min=num($('#ri_min').value), kvNom=num($('#ri_kv').value), crit=$('#ri_crit').value, tensao=$('#ri_tensao').value;
-  riSalvaEstado(); const leituras=riColeta(); const combos=window._riCombos||[];
+  riSalvaEstado(); const leituras=riColeta(); const unidades=riColetaUnidades(); const combos=window._riCombos||[];
   const semCorr=(tref==null||tref===0);
   // 0 MΩ não é uma leitura plausível de megôhmetro — trata como campo não
   // preenchido (não entra no cálculo, não reprova nem aprova por engano).
-  const gv=v=>{const n=num(v);return (n===0)?null:n;};
+  // Cada leitura é convertida para MΩ conforme a unidade selecionada (kΩ/MΩ/GΩ/TΩ) antes de qualquer cálculo.
+  const gv=(v,u)=>{const n=riConverteMOhm(v,u);return (n===0)?null:n;};
   combos.forEach((c,i)=>Object.keys(leituras[c]).forEach(t=>{
     const cell=document.querySelector(`.ri_corr[data-c="${i}"][data-t="${t}"]`);
-    if(cell){const v=gv(leituras[c][t]);const cv=semCorr?v:corrigeTemp(v,temp,tref);cell.textContent=cv!=null?fmt(cv,2):'—';}
+    if(cell){const v=gv(leituras[c][t],unidades[c][t]);const cv=semCorr?v:corrigeTemp(v,temp,tref);cell.textContent=cv!=null?fmt(cv,2):'—';}
   }));
   const linhas=combos.map(c=>{
-    const L=leituras[c],g=t=>gv(L[t]);
+    const L=leituras[c],U=unidades[c],g=t=>gv(L[t],U[t]);
     const r30=g('30s'),r60=g('60s'),r10=g('10min');
     const PI=(r10!=null&&r60!=null&&r60!==0)?r10/r60:null;
     const DAR=(r60!=null&&r30!=null&&r30!==0)?r60/r30:null;
     // A resistência mínima SEMPRE é comparada com R1min, nunca R10min.
     const r1corr=semCorr?r60:corrigeTemp(r60,temp,tref);
-    const sMin=min!=null&&r1corr!=null?(r1corr>=min?'APROVADO':'REPROVADO'):'INCONCLUSIVO';
+    // Qualquer leitura registrada em kΩ (em qualquer tempo) reprova o ensaio de
+    // imediato — kΩ indica falha de isolamento grave, independente do mínimo admissível.
+    const temKohm=Object.keys(L).some(t=>U[t]==='K'&&gv(L[t],U[t])!=null);
+    const sMin=temKohm?'REPROVADO':(min!=null&&r1corr!=null?(r1corr>=min?'APROVADO':'REPROVADO'):'INCONCLUSIVO');
     // PI é razão e não precisa de correção de temperatura quando os tempos têm a mesma temperatura.
     const piMin=(crit==='man'?null:(($('#ri_tipoEq').value==='motor'||$('#ri_tipoEq').value==='gerador')?2:null));
     const sPI=PI==null?'INCONCLUSIVO':piMin==null?'INFORMATIVO':PI>=piMin?'APROVADO':'REPROVADO';
     const sDAR=DAR==null?'INCONCLUSIVO':'INFORMATIVO';
     const arr=[sMin,sPI].filter(x=>x==='APROVADO'||x==='REPROVADO');
-    const st=arr.includes('REPROVADO')?'REPROVADO':arr.length?'APROVADO':'INCONCLUSIVO';
-    return {c,PI,DAR,r1:r60,medido:r60,ricorr:r1corr,sPI,sDAR,sMin,st};
-  }).filter(x=>x.r1!=null||x.PI!=null||x.DAR!=null);
+    const st=temKohm?'REPROVADO':(arr.includes('REPROVADO')?'REPROVADO':arr.length?'APROVADO':'INCONCLUSIVO');
+    return {c,PI,DAR,r1:r60,medido:r60,ricorr:r1corr,sPI,sDAR,sMin,st,temKohm};
+  }).filter(x=>x.r1!=null||x.PI!=null||x.DAR!=null||x.temKohm);
   const sts=linhas.map(l=>l.st);const status=!linhas.length?'INCONCLUSIVO':sts.includes('REPROVADO')?'REPROVADO':sts.every(x=>x==='APROVADO')?'APROVADO':'INCONCLUSIVO';
   const critTxt=riCritTxt(crit,kvNom);const timesArr=RI_DUR[dur].times;
-  const leiturasMatriz=combos.map(c=>({c,vals:timesArr.map(t=>{const v=gv(leituras[c][t]);return {t,medido:v,corr:semCorr?v:corrigeTemp(v,temp,tref)};})}));
+  const leiturasMatriz=combos.map(c=>({c,vals:timesArr.map(t=>{const v=gv(leituras[c][t],unidades[c][t]);return {t,medido:v,corr:semCorr?v:corrigeTemp(v,temp,tref)};})}));
   const colCorr=semCorr?'':`<th>RI corr. ${tref}°C</th>`;
   $('#ri_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <div style="overflow-x:auto"><table><thead><tr><th>Combinação</th><th>PI</th><th>DAR</th><th>R1 medido</th>${colCorr}<th>IR mínima</th><th>Situação</th></tr></thead><tbody>
@@ -1255,7 +1281,7 @@ function calcRI(){
     <div class="chart-wrap"><canvas id="ri_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Resistência de Isolamento","ri",{status,tref,semCorr,tipoEq:($('#ri_tipoEq')?$('#ri_tipoEq').value:''),tensao,temp,min,kvNom,crit,critTxt,times:timesArr,leiturasMatriz,linhas:linhas.map(l=>({c:l.c,PI:l.PI,DAR:l.DAR,medido:l.medido,ricorr:l.ricorr,st:l.st}))})}</div>`;
   const times=timesArr;
-  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:c,data:times.map(t=>num(leituras[c][t])),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'][k%6],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Resistência de Isolamento'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
+  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:c,data:times.map(t=>riConverteMOhm(leituras[c][t],unidades[c][t])),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'][k%6],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Resistência de Isolamento'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
 }
 
 function roFasesPadrao(nivel){
