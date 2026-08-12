@@ -979,7 +979,7 @@ function equipBlock(key){
   const instr=(d.instrumentos&&d.instrumentos.length)?d.instrumentos:[{tipo:'',cert:'',cal:'',venc:''}];
   return `<div class="card" id="eqcard_${key}">
     <div class="grid g4" style="margin-bottom:6px">
-      <div><label>Nº do 1º Laudo deste tipo, neste cliente</label><input id="eq_numlaudo" value="${CAD.numeroLaudo||''}" oninput="eqSetNum(this.value)" placeholder="vazio = começa em -0001, auto. a partir daí"></div>
+      <div><label>Nº do Laudo (sobrescreve o automático)</label><input id="eq_numlaudo" value="${CAD.numeroLaudo||''}" oninput="eqSetNum(this.value)" placeholder="vazio = automático, ex: 2026-RI-001-00"></div>
       <div><label>Data do Ensaio</label><input type="date" id="eq_data" value="${CAD.data||''}" onchange="eqSetData(this.value)"></div>
       <div><label>Temperatura Ambiente (°C)</label><input id="eq_temp" value="${CAD.temp||''}" oninput="eqSetTemp(this.value)"></div>
       <div><label>Umidade Relativa (%)</label><input id="eq_umid" value="${CAD.umid||''}" oninput="eqSetUmid(this.value)"></div>
@@ -1096,29 +1096,29 @@ const LABEL_ENSAIO={
   mano:'Calibração de Manômetro', termo:'Calibração de Termômetro', transd:'Calibração de Transdutor',
   press:'Calibração de Pressostato', nivel:'Calibração de Nível'
 };
-/* Próximo número de laudo, sequencial por CLIENTE (projeto) + TIPO de ensaio.
-   O primeiro laudo de um tipo, num projeto, usa o "Nº do Laudo/Protocolo" digitado
-   manualmente (CAD.numeroLaudo) se houver; senão começa em "<Rótulo>-0001". Os
-   próximos laudos do MESMO tipo, no MESMO projeto, seguem a sequência a partir daí,
-   preservando o prefixo/formato usado no primeiro. */
+/* Sigla curta de cada tipo de ensaio — usada na numeração automática (ex.: "RI" em 2026-RI-001-00) */
+const SIGLA_ENSAIO={
+  ri:'RI', rohm:'RO', rc:'RC', fp:'FP', dp:'DP', oleo:'OL',
+  ta:'TA', rt:'RT', atr:'AT', spda:'SP', ppc:'PC', motor:'MT',
+  mano:'MN', termo:'TE', transd:'TR', press:'PR', nivel:'NV'
+};
+/* Próximo número de laudo, sempre no formato ANO-SIGLA-SEQUENCIAL-REVISÃO
+   (ex.: 2026-RI-001-00) — sequencial por CLIENTE (projeto) + TIPO de ensaio,
+   ano tirado da Data do Ensaio (CAD.data), revisão sempre "00" (é o técnico
+   quem decide manualmente subir a revisão ao reemitir um laudo corrigido).
+   O campo "Nº do Laudo" no bloco de equipamento sempre pode sobrescrever
+   este valor, tanto para um laudo novo quanto para renumerar um já editado. */
 function proximoNumeroLaudo(cadId,key){
-  const rotulo=LABEL_ENSAIO[key]||key;
+  const sigla=SIGLA_ENSAIO[key]||(key||'XX').toUpperCase().slice(0,2);
+  const ano=(CAD.data||'').slice(0,4)||String(new Date().getFullYear());
   const doMesmoTipo=LAUDOS.filter(l=>l.cadId===cadId&&l.key===key);
-  if(!doMesmoTipo.length){
-    const manual=(CAD.numeroLaudo||'').trim();
-    return manual||(rotulo+'-0001');
-  }
   let maxSeq=0;
   doMesmoTipo.forEach(l=>{
-    const m=String(l.numero||'').match(/(\d+)\s*$/);
+    const m=String(l.numero||'').match(/-(\d{3,})-\d+\s*$/);
     if(m){const n=parseInt(m[1],10); if(!isNaN(n)&&n>maxSeq)maxSeq=n;}
   });
-  const prox=maxSeq+1;
-  const primeiro=String(doMesmoTipo[0].numero||'');
-  const prefixMatch=primeiro.match(/^(.*?)(\d+)\s*$/);
-  const prefixo=prefixMatch?prefixMatch[1]:(rotulo+'-');
-  const digitos=prefixMatch?prefixMatch[2].length:4;
-  return prefixo+String(prox).padStart(digitos,'0');
+  const seq=String(maxSeq+1).padStart(3,'0');
+  return ano+'-'+sigla+'-'+seq+'-00';
 }
 let chartRef=null, chartRef2=null;
 function drawChart(id,cfg){if(chartRef)chartRef.destroy();chartRef=new Chart(document.getElementById(id),cfg);}
@@ -2635,7 +2635,12 @@ function gerarLaudo(tipo,key,dados){
   const editId=window._editandoLaudoId;
   const editando=editId?LAUDOS.find(x=>x.id===editId&&x.key===key):null;
   const id=editando?editando.id:uid();
-  const numero=editando?editando.numero:proximoNumeroLaudo(CAD.id,key);
+  // "Nº do Laudo" digitado manualmente sempre vence — tanto para definir o
+  // número de um laudo novo quanto para renumerar um que está sendo editado.
+  // Consumido uma única vez (limpo logo abaixo) pra não vazar pro próximo laudo.
+  const manualOverride=(CAD.numeroLaudo||'').trim();
+  const numero=manualOverride||(editando?editando.numero:proximoNumeroLaudo(CAD.id,key));
+  if(manualOverride){ CAD.numeroLaudo=''; saveClientes(); }
   const chartImg = chartRef? compactChartImg(chartRef):null;
   const chartImg2 = chartRef2? compactChartImg(chartRef2):null;
   // snapshot global + sobrescreve equipamento/instrumentos com os DESTE ensaio
