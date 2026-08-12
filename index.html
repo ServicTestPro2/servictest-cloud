@@ -392,6 +392,15 @@ function logoutST(){
   document.getElementById('lu').value=''; document.getElementById('lp').value='';
   restaurarTemaST(); // volta pro tema deste navegador (sem usuário logado)
 }
+/* Envia tudo para a nuvem e só então sai — evita esquecer de sincronizar antes
+   de fechar o sistema (usado pelo botão "Salvar e Sair" do Painel). */
+function salvarESairST(){
+  sbSetStatus('Salvando...','var(--warn)');
+  sbFullSync().then(()=>{ logoutST(); }).catch(e=>{
+    sbSetStatus('Não conectado','var(--fail)');
+    if(confirm('❌ Não foi possível salvar na nuvem agora ('+e.message+').\n\nSair mesmo assim? Alterações não sincronizadas podem ficar só neste dispositivo.')) logoutST();
+  });
+}
 
 /* ============ SUPABASE — SINCRONIZAÇÃO NA NUVEM ============
    Mesmo padrão usado no OrcaSystem/GestãoCampo: uma única tabela
@@ -449,6 +458,7 @@ async function sbSession(){
 function sbSetStatus(txt,cor){
   const el=document.getElementById('sbStatus'); if(el){ el.textContent=txt; el.style.color=cor||'var(--muted)'; }
   const el2=document.getElementById('sbStatusSide'); if(el2){ el2.textContent='☁️ '+txt; el2.style.color=cor||'#8fa0c4'; }
+  const el3=document.getElementById('sbStatusEnsaio'); if(el3){ el3.textContent='☁️ '+txt; el3.style.color=cor||'var(--muted)'; }
 }
 async function sbLogin(emailArg,senhaArg){
   const email=emailArg||(document.getElementById('cfg-sb-email')||{}).value||'';
@@ -940,6 +950,8 @@ function cadResumo(key){
         ${CLIENTES.length?CLIENTES.map(c=>`<option value="${c.id}" ${c.id===CAD.id?'selected':''}>${(c.nomeCadastro||c.cliente||'(sem nome)')}${c.cliente&&c.nomeCadastro&&c.cliente!==c.nomeCadastro?' — '+c.cliente:''}</option>`).join(''):`<option value="">(nenhum cadastrado)</option>`}
       </select>
       <button class="btn btn-g" style="padding:6px 12px" onclick="go('cad')">Gerenciar clientes</button>
+      <button class="btn btn-g" style="padding:6px 12px;margin-left:auto" onclick="syncSupabaseST()" title="Enviar tudo o que foi feito para a nuvem agora">☁️ Salvar na nuvem</button>
+      <span id="sbStatusEnsaio" style="font-size:11px;color:var(--muted)">—</span>
     </div></div>`;
   if(!CLIENTES.length || !CAD.cliente){
     return seletor + `<div class="hint">⚠ Selecione ou cadastre um cliente (aba <b>Clientes</b>) e preencha os dados antes de gerar laudos.</div>` + (key?equipBlock(key):'');
@@ -2102,8 +2114,9 @@ function renderDash(){
   const ap=laudosVis.filter(l=>l.status==='APROVADO').length;
   const rp=laudosVis.filter(l=>l.status==='REPROVADO').length;
   const at=laudosVis.filter(l=>l.status==='ATENÇÃO').length;
-  $('#main').innerHTML = header('Painel de Ensaios','Visão geral dos laudos emitidos','NBR + IEEE/IEC')+`
-  <div class="kpi">
+  $('#main').innerHTML = header('Painel de Ensaios','Visão geral dos laudos emitidos','NBR + IEEE/IEC')
+  +`<div style="display:flex;justify-content:flex-end;margin:-6px 0 14px"><button class="btn btn-ok" onclick="salvarESairST()" title="Envia tudo para a nuvem e sai do sistema">💾 Salvar e Sair</button></div>`
+  +`<div class="kpi">
     <div class="k"><div class="v">${total}</div><div class="l">Laudos Totais</div></div>
     <div class="k"><div class="v" style="color:var(--ok)">${ap}</div><div class="l">Aprovados</div></div>
     <div class="k"><div class="v" style="color:var(--fail)">${rp}</div><div class="l">Reprovados</div></div>
