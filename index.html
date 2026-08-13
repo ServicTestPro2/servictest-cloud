@@ -2606,6 +2606,8 @@ function novoEnsaio(key){
    Salvar (gerarLaudo) atualiza o MESMO laudo em vez de criar um novo. */
 function editarLaudo(id){
   const l=LAUDOS.find(x=>x.id===id); if(!l){alert('Laudo não encontrado.');return;}
+  const idsPermEdit=_idsClientesVisiveis();
+  if(idsPermEdit && (!l.cadId || !idsPermEdit.includes(String(l.cadId)))){ alert('⛔ Você não tem permissão para editar este laudo.'); return; }
   if(!confirm('Abrir o laudo "'+(l.numero||l.id)+'" para edição?\n\nOs dados salvos deste laudo serão carregados no formulário do ensaio.'))return;
   setClienteAtivo(l.cadId);
   // formState = formulário bruto (o que a pessoa digitou); dados = resultado já
@@ -2933,9 +2935,9 @@ function renderConfig(){
       <tbody id="tbUsuariosST"></tbody></table>
     </div>
   </div>`:''}
-  <div class="card">
+  ${isAdminST()?`<div class="card">
     <h3>💾 Backup e Restauração</h3>
-    <div class="sub">Exporte um arquivo para guardar ou levar a outro computador. A importação mescla sem duplicar.</div>
+    <div class="sub">Exporte um arquivo para guardar ou levar a outro computador. A importação mescla sem duplicar. Restrito ao Administrador — o backup contém os laudos e clientes de TODOS os usuários, não só os liberados para quem está exportando.</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-p" onclick="exportarTudo()">⬇️ Exportar tudo (.json)</button>
       <button class="btn btn-g" onclick="document.getElementById('imp_tudo').click()">⬆️ Importar backup</button>
@@ -2943,7 +2945,7 @@ function renderConfig(){
       <button class="btn btn-g" onclick="exportarLaudos()">⬇️ Só laudos</button>
     </div>
     <div class="hint" style="margin-top:12px">📦 Armazenados atualmente: <b>${nLaudos}</b> laudo(s) e <b>${nClientes}</b> cliente(s). Os dados ficam salvos neste navegador (IndexedDB) — exporte periodicamente para não perder ao limpar o navegador.</div>
-  </div>
+  </div>`:''}
 
   ${isAdminST()?(()=>{const c=sbCfg();return`<div class="card">
     <h3>☁️ Sincronização na Nuvem (Supabase)</h3>
