@@ -3032,11 +3032,14 @@ function limparTodosLaudos(){
   try{DB.set('laudos',[]);}catch(_){}
   alert('Todos os laudos foram apagados.');renderConfig();
 }
-let _filtroLaudo={q:'',tipo:'',status:''};
+let _filtroLaudo={q:'',tipo:'',status:'',cliente:''};
 function setFiltroLaudo(campo,val){_filtroLaudo[campo]=val;renderLaudosTabela();}
 function laudosFiltrados(){
   const q=_filtroLaudo.q.trim().toLowerCase();
   return laudosVisiveisST().slice().reverse().filter(l=>{
+    // Filtro por cliente só tem efeito prático para o Administrador — os demais
+    // usuários já só veem os laudos do(s) cliente(s) liberados para eles.
+    if(_filtroLaudo.cliente && String(l.cadId)!==_filtroLaudo.cliente) return false;
     if(_filtroLaudo.tipo && l.tipo!==_filtroLaudo.tipo) return false;
     if(_filtroLaudo.status && l.status!==_filtroLaudo.status) return false;
     if(q){
@@ -3205,18 +3208,20 @@ function renderNormas(){
 }
 function renderLaudos(){
   const tipos=[...new Set(LAUDOS.map(l=>l.tipo))].sort();
+  const isAdm=isAdminST();
   $('#main').innerHTML=header('Laudos Gerados','Histórico de laudos emitidos','')+`
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <div style="font-size:12px;color:var(--muted)">${laudosVisiveisST().length} laudo(s) armazenado(s)</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${isAdm?`<div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-g" style="padding:7px 14px" onclick="exportarLaudos()">⬇️ Exportar backup (.json)</button>
         <button class="btn btn-g" style="padding:7px 14px" onclick="document.getElementById('imp_laudos').click()">⬆️ Importar backup</button>
         <input type="file" id="imp_laudos" accept="application/json,.json" style="display:none" onchange="importarLaudos(this)">
-      </div>
+      </div>`:''}
     </div>
-    <div class="grid g3" style="margin-bottom:14px">
+    <div class="grid ${isAdm?'g4':'g3'}" style="margin-bottom:14px">
       <div><label>🔎 Buscar (nº, cliente, equipamento, data)</label><input id="lf_q" value="${_filtroLaudo.q}" oninput="setFiltroLaudo('q',this.value)" placeholder="digite para filtrar..."></div>
+      ${isAdm?`<div><label>Cliente</label><select onchange="setFiltroLaudo('cliente',this.value)"><option value="">Todos</option>${CLIENTES.map(c=>`<option value="${c.id}" ${_filtroLaudo.cliente===String(c.id)?'selected':''}>${c.nomeCadastro||c.cliente||'(sem nome)'}</option>`).join('')}</select></div>`:''}
       <div><label>Tipo de ensaio</label><select onchange="setFiltroLaudo('tipo',this.value)"><option value="">Todos</option>${tipos.map(t=>`<option ${_filtroLaudo.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div><label>Resultado</label><select onchange="setFiltroLaudo('status',this.value)"><option value="">Todos</option>${['APROVADO','ATENÇÃO','REPROVADO'].map(s=>`<option ${_filtroLaudo.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div>
