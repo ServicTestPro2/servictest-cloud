@@ -1487,7 +1487,7 @@ function calcOleo(){
     <table><thead><tr><th>Aplicação</th><th>Ruptura (kV)</th><th>Critério</th><th>Situação</th></tr></thead><tbody>
     ${pts.map(p=>{const ok=hasLim?(numMed(p.v)>=lim?'APROVADO':'REPROVADO'):'INCONCLUSIVO';return `<tr><td>${p.n}</td><td><b>${fmt(numMed(p.v),1)}</b></td><td>${hasLim?fmt(lim,1)+' kV':'Não definido'}</td><td>${tag(ok)}</td></tr>`;}).join('')}
     <tr style="background:var(--hint-bg)"><td><b>Média (informativa)</b></td><td><b>${media!=null?fmt(media,1):'—'} kV</b></td><td colspan="2">${hasLim?'Não substitui a verificação individual dos valores.':'Critério não definido'}</td></tr></tbody></table>
-    <div class="hint" style="margin-top:10px">IEC 60156:2025 especifica o método de determinação da tensão de ruptura dielétrica em frequência de potência. O software preserva cada ruptura individual e não usa somente a média para aprovar o ensaio. Leituras iguais a 0 são tratadas como não preenchidas.</div>
+    <div class="hint" style="margin-top:10px">IEC 60156:2018 (3ª ed.) especifica o método de determinação da tensão de ruptura dielétrica em frequência de potência. O software preserva cada ruptura individual e não usa somente a média para aprovar o ensaio. Leituras iguais a 0 são tratadas como não preenchidas.</div>
     <div class="chart-wrap"><canvas id="ol_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Rigidez Dielétrica do Óleo","oleo",{status,pontos:pts,lim,media})}</div>`;
   drawChart('ol_chart',{type:'bar',data:{labels:pts.map(p=>p.n),datasets:[{label:'Ruptura (kV)',data:vals,backgroundColor:vals.map(v=>hasLim&&v<lim?'#c52b2b':'#65a30d')},hasLim?{type:'line',label:'Limite',data:vals.map(()=>lim),borderColor:'#b8860b',borderDash:[6,4],pointRadius:0}:null].filter(Boolean)},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Rigidez Dielétrica do Óleo'}}}});
@@ -2135,9 +2135,9 @@ function renderDash(){
          ['motor','⚙️','Ficha de Motor','IEEE 43 / NBR 17094 / ISO 20816'],
          ['mano','🧭','Manômetro','ISO/IEC 17025 · Erro F.E. & histerese'],
          ['termo','🌡️','Termômetro / PT-100','IEC 60751 · Erro °C'],
-         ['transd','📟','Transdutor','IEC 62828-1:2026 · Loop 4-20mA'],
-         ['press','🎚️','Pressostato','IEC 62828-1:2026 · Alarme/Disparo'],
-         ['nivel','📏','Nível','IEC 62828-1:2026 · Loop test']
+         ['transd','📟','Transdutor','IEC 62828-1:2017 · Loop 4-20mA'],
+         ['press','🎚️','Pressostato','IEC 62828-1:2017 · Alarme/Disparo'],
+         ['nivel','📏','Nível','IEC 62828-1:2017 · Loop test']
         ].map(([p,i,t,d])=>`<div class="card" style="margin:0;cursor:pointer" onclick="go('${p}')">
           <h3>${i} ${t}</h3><div class="sub" style="margin:0">${d}</div></div>`).join('')}
     </div>
@@ -2337,7 +2337,7 @@ function renderTransd(){
   if(!Array.isArray(s.pontos)||!s.pontos.length) s.pontos=['0','25','50','75','100'];
   if(!Array.isArray(s.itens)) s.itens=[{tag:'Transd #1',leit:[]}];
   const isMa=s.modo==='ma';
-  $('#main').innerHTML=header('Calibração de Transdutor','Loop test 4-20 mA · erro % do span','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('transd')+`
+  $('#main').innerHTML=header('Calibração de Transdutor','Loop test 4-20 mA · erro % do span','IEC 62828-1:2017 / ISO/IEC 17025')+cadResumo('transd')+`
   <div class="card">
     <h3>📟 Parâmetros</h3>
     <div class="grid g4">
@@ -2395,7 +2395,7 @@ function calcTransd(){
 /* ============ 12) PRESSOSTATO ============ */
 function renderPress(){
   const s=E('press',{tol:'',itens:[{tag:'PIS #1',tipo:'-100..10bar',spAlarme:'',alarme:'',spDisparo:'',disparo:''}]});
-  $('#main').innerHTML=header('Calibração de Pressostato','Verificação de alarme e disparo (setpoint)','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('press')+`
+  $('#main').innerHTML=header('Calibração de Pressostato','Verificação de alarme e disparo (setpoint)','IEC 62828-1:2017 / ISO/IEC 17025')+cadResumo('press')+`
   <div class="card">
     <h3>🎚️ Parâmetros</h3>
     <div class="grid g2"><div><label>Tolerância de Erro (% do span/setpoint — conforme procedimento)</label><input id="ps_tol" value="${s.tol}"></div></div>
@@ -2443,7 +2443,7 @@ function renderNivel(){
   if(!Array.isArray(s.pontos)||!s.pontos.length) s.pontos=['25','50','75','100'];
   if(!Array.isArray(s.itens)) s.itens=[{tag:'Nível #1',tipo:'',leit:[]}];
   const isMa=s.modo==='ma';
-  $('#main').innerHTML=header('Calibração de Sensor de Nível','Loop test nos pontos de referência','IEC 62828-1:2026 / ISO/IEC 17025')+cadResumo('nivel')+`
+  $('#main').innerHTML=header('Calibração de Sensor de Nível','Loop test nos pontos de referência','IEC 62828-1:2017 / ISO/IEC 17025')+cadResumo('nivel')+`
   <div class="card">
     <h3>📏 Parâmetros</h3>
     <div class="grid g3">
@@ -2501,12 +2501,12 @@ const NORMAS={
  motor:{n:'IEEE 43-2013 / IEC 60034 / ISO 20816, conforme máquina',c:'IA=R1/R30 e PI=R10/R1. PI deve seguir classe/procedimento. Vibração deve ser classificada pela parte aplicável da ISO 20816 e características da máquina. Desbalanço de corrente pelo máximo desvio da média.'},
  mano:{n:'ABNT NBR ISO/IEC 17025 + especificação do instrumento / procedimento de calibração',c:'Erro = indicação−referência. Erro %FE = erro/FE×100 quando essa é a base definida. Histerese = diferença entre ciclos, também referida à base definida.'},
  termo:{n:'IEC 60751:2022 + ABNT NBR ISO/IEC 17025',c:'PT100 segue relação resistência-temperatura da IEC 60751 e classe de tolerância especificada. Erro = indicação−referência.'},
- transd:{n:'IEC 62828-1:2026 + parte específica da série / ABNT NBR ISO/IEC 17025',c:'Para 4–20 mA: I=4+16×fração do span; PV=LRV+(I−4)/16×span. Erro relativo deve usar a base de tolerância especificada.'},
- press:{n:'IEC 62828-1:2026 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'Erro de atuação = atuação−setpoint. Tolerância deve ser expressa na unidade ou como % do span conforme procedimento; evitar % do setpoint perto de zero.'},
- nivel:{n:'IEC 62828-1:2026 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'PV=LRV+(I−4)/16×span. Erro = PVmed−PVref; tolerância conforme exatidão especificada.'},
+ transd:{n:'IEC 62828-1:2017 + parte específica da série / ABNT NBR ISO/IEC 17025',c:'Para 4–20 mA: I=4+16×fração do span; PV=LRV+(I−4)/16×span. Erro relativo deve usar a base de tolerância especificada.'},
+ press:{n:'IEC 62828-1:2017 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'Erro de atuação = atuação−setpoint. Tolerância deve ser expressa na unidade ou como % do span conforme procedimento; evitar % do setpoint perto de zero.'},
+ nivel:{n:'IEC 62828-1:2017 e parte específica aplicável / fabricante / ABNT NBR ISO/IEC 17025',c:'PV=LRV+(I−4)/16×span. Erro = PVmed−PVref; tolerância conforme exatidão especificada.'},
  fp:{n:'IEEE C57.152 / IEC 60137 / procedimento específico',c:'Tan δ/fator de dissipação é diagnóstico. Limite de aceitação depende do equipamento, temperatura, tensão, frequência e histórico; não usar 0,5% universal.'},
  dp:{n:'IEC 60270 / norma específica do equipamento',c:'IEC 60270 define o método de medição. Limites em pC dependem do equipamento, ensaio e especificação; não usar 500 pC universal.'},
- oleo:{n:'IEC 60156:2025 / norma e procedimento do equipamento',c:'Determinação da tensão de ruptura dielétrica em frequência de potência. Registrar cada ruptura; a média é estatística e não substitui critério de aceitação específico.'}
+ oleo:{n:'IEC 60156:2018 (3ª ed.) / norma e procedimento do equipamento',c:'Determinação da tensão de ruptura dielétrica em frequência de potência. Registrar cada ruptura; a média é estatística e não substitui critério de aceitação específico.'}
 };
 /* RI: a IEEE 43-2013 é específica para máquinas rotativas (motor/gerador) — para os
    demais tipos de equipamento (trafo/cabo/barra/TC/TP/isolador) não deve ser citada
@@ -2570,9 +2570,9 @@ const ANALISE={
  motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s, informativo) e IP (R10min/R1min, comparado a 2,0 como referência de classes B/F/H — não um requisito universal); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada ao limite do tipo/porte/montagem da máquina conforme ISO 20816; e desbalanço de corrente entre fases pelo desvio máximo em relação à média. A aprovação considera IP, vibração e desbalanço de corrente apenas quando um critério foi de fato definido para cada um — sem critério, o item fica informativo/inconclusivo, não aprovado por padrão.',
  mano:'A calibração do manômetro foi realizada por comparação com padrão rastreável em pontos crescentes e decrescentes da faixa. Calcularam-se o erro percentual referido ao fundo de escala e a histerese (diferença entre as curvas), comparados à classe de exatidão do instrumento conforme NBR ISO/IEC 17025.',
  termo:'O termômetro/sensor PT-100 foi verificado por comparação com padrão rastreável em pontos de referência definidos. O erro em °C de cada ponto foi calculado e comparado à tolerância da classe (PT-100 Classe A/B conforme IEC 60751).',
- transd:'O transdutor foi verificado por loop test ao longo do span (sinal 4–20 mA ou equivalente) nos pontos de referência. O erro percentual do span foi calculado e comparado à exatidão especificada do transmissor (IEC 62828-1:2026).',
+ transd:'O transdutor foi verificado por loop test ao longo do span (sinal 4–20 mA ou equivalente) nos pontos de referência. O erro percentual do span foi calculado e comparado à exatidão especificada do transmissor (IEC 62828-1:2017).',
  press:'O pressostato foi verificado quanto aos pontos de atuação (setpoint de alarme e de disparo), registrando-se a pressão real de comutação. O erro absoluto (atuação − setpoint) foi calculado e comparado à tolerância de projeto — evita-se o erro percentual do setpoint, que se distorce quando o setpoint está próximo de zero.',
- nivel:'O instrumento de nível foi verificado por loop test nos pontos percentuais de referência, calculando-se o erro em relação ao valor esperado e comparando-o à exatidão especificada (IEC 62828-1:2026).',
+ nivel:'O instrumento de nível foi verificado por loop test nos pontos percentuais de referência, calculando-se o erro em relação ao valor esperado e comparando-o à exatidão especificada (IEC 62828-1:2017).',
  fp:'O fator de potência da isolação (tangente delta) foi medido em ponte de capacitância, registrando-se a capacitância e o fator de dissipação de cada medição. Os valores foram comparados ao limite definido pelo fabricante, norma/procedimento específico e/ou histórico do equipamento, referidos a 20 °C, servindo como indicador de umidade e envelhecimento da isolação conforme IEEE C57.152 / IEC 60137.',
  dp:'As descargas parciais foram medidas em picocoulombs (pC) sob tensão aplicada, conforme IEC 60270, registrando-se o nível máximo de cada ponto. A aprovação considera o nível de descarga abaixo do limite especificado para o equipamento, sendo a intensidade um indicador da integridade da isolação.',
  oleo:'A rigidez dielétrica do óleo isolante foi determinada por ensaio de tensão de ruptura em conjunto de eletrodos padronizado, realizando-se sucessivas aplicações e calculando-se a média conforme IEC 60156. O valor médio foi comparado ao mínimo admissível para a classe de tensão do equipamento, indicando o nível de contaminação por umidade e partículas.'
@@ -3062,10 +3062,11 @@ function renderLaudosTabela(){
    Não reproduz o texto das normas (protegido por direitos autorais). */
 const BIBLIO_NORMAS = [
   {cat:'Resistência de Isolamento', cor:'#1E4FD8', itens:[
-    {cod:'IEEE 43:2013', org:'IEEE', tit:'Recommended Practice for Testing Insulation Resistance of Electric Machinery', desc:'Referência principal para ensaio de resistência de isolamento e índice de polarização (PI) em máquinas rotativas. Define valores mínimos recomendados (1 MΩ/kV para máquinas antigas; 100 MΩ para bobinas form-wound modernas; 5 MΩ para enrolamentos random-wound ≤1 kV) e a correção da resistência para 40 °C.'},
+    {cod:'IEEE 43:2013', org:'IEEE', tit:'Recommended Practice for Testing Insulation Resistance of Electric Machinery', desc:'Referência principal para ensaio de resistência de isolamento e índice de polarização (PI) em máquinas rotativas. Define valores mínimos recomendados (1 MΩ/kV para máquinas antigas; 100 MΩ para bobinas form-wound modernas; 5 MΩ para enrolamentos random-wound ≤1 kV) e a correção da resistência para 40 °C. Nota: classificada pela IEEE como "Inactive-Reserved" desde 21/03/2024, aguardando a revisão do grupo de trabalho P43 — continua sendo o documento de referência de fato usado pelo setor até a publicação da nova edição.'},
     {cod:'ABNT NBR 5383-1', org:'ABNT', tit:'Máquinas elétricas girantes — Ensaios', desc:'Procedimentos de ensaio para máquinas de indução, incluindo medições de isolamento, resistência ôhmica e desempenho. Versão nacional alinhada às práticas IEC/IEEE.'},
     {cod:'ABNT NBR 10295', org:'ABNT', tit:'Máquinas elétricas girantes — Limites de elevação de temperatura', desc:'Estabelece classes térmicas e limites de temperatura de enrolamentos, base para correção de valores de isolamento à temperatura de referência.'},
     {cod:'IEEE 95', org:'IEEE', tit:'Recommended Practice for Insulation Testing of AC Electric Machinery (>2300 V) with High DC Voltage', desc:'Orienta ensaios de isolamento com alta tensão CC (hipot CC) em máquinas de média/alta tensão, complementando o ensaio de resistência de isolamento.'},
+    {cod:'IEC 61557-2:2019', org:'IEC', tit:'Electrical safety in LV distribution systems — Equipment for testing, measuring or monitoring — Part 2: Insulation resistance', desc:'Define os requisitos do próprio instrumento de medição (megôhmetro) usado para ensaiar resistência de isolamento em instalações de baixa tensão — complementa a IEEE 43, que trata do método de ensaio em máquinas rotativas, e não do equipamento de medição.'},
   ]},
   {cat:'Transformadores', cor:'#0d8a4f', itens:[
     {cod:'IEEE C57.152', org:'IEEE', tit:'Guide for Diagnostic Field Testing of Fluid-Filled Power Transformers, Regulators and Reactors', desc:'Guia de ensaios de campo para transformadores e reatores: isolamento, fator de potência/tangente delta, relação de transformação, resistência de enrolamento e diagnóstico de condição.'},
@@ -3077,6 +3078,8 @@ const BIBLIO_NORMAS = [
     {cod:'IEC 60502 (série)', org:'IEC', tit:'Power cables with extruded insulation (1 kV a 30 kV)', desc:'Requisitos construtivos e de ensaio para cabos de potência com isolação extrudada de média tensão. Base para avaliação de isolamento de cabos (referência a 20 °C).'},
     {cod:'IEEE 400 (série)', org:'IEEE', tit:'Guide for Field Testing and Evaluation of the Insulation of Shielded Power Cable Systems', desc:'Guia para ensaios de campo de cabos blindados: VLF, tangente delta, CC e diagnóstico de condição da isolação.'},
     {cod:'ABNT NBR 7286 / 7287', org:'ABNT', tit:'Cabos de potência com isolação EPR / XLPE (1 kV a 35 kV)', desc:'Especificações nacionais para cabos isolados em EPR e XLPE, incluindo requisitos de desempenho e ensaios de isolação.'},
+    {cod:'IEEE 400.2-2013', org:'IEEE', tit:'Guide for Field Testing of Shielded Power Cable Systems Using Very Low Frequency (VLF, <1 Hz)', desc:'Guia para ensaio de campo de cabos isolados blindados usando fonte de tensão de frequência muito baixa (VLF), alternativa ao hipot CC/CA convencional para cabos de média tensão já instalados.'},
+    {cod:'IEEE 400.3-2022', org:'IEEE', tit:'Guide for Partial Discharge Field Diagnostic Testing of Shielded Power Cable Systems', desc:'Guia específico para diagnóstico de descargas parciais em cabos de potência blindados já instalados em campo, complementando a IEC 60270 (método de medição mais genérico) com foco em cabos envelhecidos.'},
   ]},
   {cat:'Aterramento', cor:'#b8860b', itens:[
     {cod:'ABNT NBR 15749', org:'ABNT', tit:'Medição de resistência de aterramento e de potenciais na superfície do solo', desc:'Define o método de medição de resistência de aterramento (queda de potencial / 62%) e de tensões de passo e toque. Referência para ensaio de malhas e hastes.'},
@@ -3111,7 +3114,7 @@ const BIBLIO_NORMAS = [
     {cod:'IEC 60137', org:'IEC', tit:'Buchas isoladas para tensões alternadas acima de 1000 V', desc:'Define requisitos e ensaios de buchas, incluindo medição de capacitância e fator de dissipação da isolação.'},
   ]},
   {cat:'Óleo Isolante', cor:'#65a30d', itens:[
-    {cod:'IEC 60156', org:'IEC', tit:'Líquidos isolantes — Tensão de ruptura dielétrica', desc:'Método de ensaio da rigidez dielétrica de óleos isolantes, indicador de contaminação por umidade e partículas.'},
+    {cod:'IEC 60156:2018 (3ª ed.)', org:'IEC', tit:'Líquidos isolantes — Tensão de ruptura dielétrica', desc:'Método de ensaio da rigidez dielétrica de óleos isolantes, indicador de contaminação por umidade e partículas. A 3ª edição (2018) cancelou e substituiu a edição de 1995.'},
     {cod:'IEC 60422', org:'IEC', tit:'Óleos minerais isolantes — Supervisão e manutenção', desc:'Diretrizes para acompanhamento da condição de óleos minerais em equipamentos elétricos em serviço.'},
     {cod:'IEEE C57.104', org:'IEEE', tit:'Interpretação de gases dissolvidos (DGA) em transformadores', desc:'Critérios para interpretação da análise de gases dissolvidos no óleo, usada no diagnóstico de falhas internas de transformadores.'},
     {cod:'ABNT NBR 10576', org:'ABNT', tit:'Óleo mineral isolante — Diretrizes para supervisão e manutenção', desc:'Versão nacional para acompanhamento e ensaios de óleo isolante em transformadores em operação.'},
@@ -3142,12 +3145,25 @@ const BIBLIO_NORMAS = [
     {cod:'NR-12', org:'MTE', tit:'Segurança no trabalho em máquinas e equipamentos', desc:'Requisitos de proteção de máquinas e equipamentos, incluindo dispositivos de segurança e parada de emergência.'},
     {cod:'NR-35', org:'MTE', tit:'Trabalho em altura', desc:'Requisitos de segurança para atividades acima de 2 m, relevante para ensaios em estruturas, torres e SPDA.'},
     {cod:'NR-06', org:'MTE', tit:'Equipamento de Proteção Individual (EPI)', desc:'Define obrigações quanto ao fornecimento e uso de EPIs, incluindo os de proteção contra riscos elétricos.'},
+    {cod:'IEEE 1584-2018', org:'IEEE', tit:'Guide for Performing Arc-Flash Hazard Calculations', desc:'Método de cálculo de energia incidente e distância de risco de arco elétrico, usado para dimensionar EPI e distâncias seguras de trabalho em equipamentos de média/alta tensão — referência internacional complementar à NR-10.'},
+    {cod:'NFPA 70E (edição 2024)', org:'NFPA', tit:'Standard for Electrical Safety in the Workplace', desc:'Norma norte-americana de segurança elétrica no trabalho (choque, arco elétrico, seleção de EPI), frequentemente citada ao lado da NR-10 em laboratórios que atendem clientes com padrão internacional.'},
   ]},
   {cat:'Comissionamento e Manutenção', cor:'#42506e', itens:[
-    {cod:'NETA ATS / MTS', org:'NETA', tit:'Especificações de ensaios de aceitação e manutenção', desc:'Especificações amplamente usadas para ensaios de aceitação (ATS) e manutenção (MTS) de equipamentos elétricos de potência, com valores de referência para isolamento, contato e isolação.'},
+    {cod:'ANSI/NETA ATS-2025 / MTS-2023', org:'NETA', tit:'Especificações de ensaios de aceitação e manutenção', desc:'Especificações amplamente usadas para ensaios de aceitação (ATS) e manutenção (MTS) de equipamentos elétricos de potência, com valores de referência para isolamento, contato e isolação. ATS-2025 (aprovada em 20/02/2025) e MTS-2023 (aprovada em 06/03/2023) são as edições vigentes.'},
     {cod:'IEEE 62', org:'IEEE', tit:'Diagnóstico de campo de equipamentos de potência', desc:'Guia de ensaios de diagnóstico de campo em equipamentos de potência (transformadores, buchas, para-raios).'},
     {cod:'IEC 60505', org:'IEC', tit:'Avaliação e qualificação de sistemas de isolação elétrica', desc:'Critérios para avaliação e classificação de sistemas de isolação quanto ao desempenho e vida útil.'},
     {cod:'IEEE 525', org:'IEEE', tit:'Projeto e instalação de cabos em subestações', desc:'Guia para projeto, instalação e ensaios de sistemas de cabeamento em subestações.'},
+  ]},
+  {cat:'Metrologia e Calibração de Instrumentos', cor:'#059669', itens:[
+    {cod:'ABNT NBR ISO/IEC 17025:2017', org:'ABNT/ISO/IEC', tit:'Requisitos gerais para a competência de laboratórios de ensaio e calibração', desc:'Norma-base de acreditação que rege a competência técnica, imparcialidade e operação de laboratórios de ensaio/calibração — referência usada pela Rede Brasileira de Calibração (Inmetro/Cgcre). No Brasil, manômetro, termômetro, transdutor, pressostato e sensor de nível não têm Regulamento Técnico Metrológico (RTM) dedicado — a calibração desses instrumentos de processo é regida por esta norma e pelos guias DOQ-CGCRE correspondentes, não por uma norma de calibração obrigatória específica.'},
+    {cod:'DOQ-CGCRE-017', org:'Inmetro/Cgcre', tit:'Orientação sobre a calibração de instrumentos de pressão', desc:'Guia técnico oficial do Inmetro para calibração de manômetros, manovacuômetros e instrumentos de pressão análogos, usado como referência pelos laboratórios acreditados na Rede Brasileira de Calibração.'},
+    {cod:'DOQ-CGCRE-046', org:'Inmetro/Cgcre', tit:'Orientação sobre a calibração de termopares', desc:'Versão brasileira do guia EURAMET cg-8 para calibração de termopares por comparação com padrão ou por pontos fixos — referência aplicável a sensores de temperatura em geral.'},
+    {cod:'OIML R 109', org:'OIML', tit:'Indicating pressure gauges, vacuum gauges and pressure-vacuum gauges', desc:'Recomendação internacional de metrologia legal para manômetros e vacuômetros de ponteiro com elemento elástico, cobrindo faixas de 0,06 MPa a 250 MPa.'},
+    {cod:'VIM 2012 (JCGM 200:2012)', org:'Inmetro/BIPM/ABNT', tit:'Vocabulário Internacional de Metrologia', desc:'Vocabulário oficial que padroniza termos como calibração, incerteza de medição e rastreabilidade — referência transversal citada em qualquer relatório de calibração.'},
+  ]},
+  {cat:'Termografia Infravermelha', cor:'#be123c', itens:[
+    {cod:'ABNT NBR 16818:2020', org:'ABNT', tit:'Ensaios não destrutivos — Termografia infravermelha — Procedimento para aplicações do método da termografia infravermelha', desc:'Norma de procedimento geral para inspeção termográfica de equipamentos elétricos e mecânicos em operação, incluindo Emenda 1 (25/11/2025). Substituiu e cancelou a antiga NBR 15572:2013.'},
+    {cod:'ABNT NBR 16969:2021', org:'ABNT', tit:'Ensaios não destrutivos — Termografia infravermelha — Princípios gerais', desc:'Consolida num único documento os fundamentos técnicos do método de termografia infravermelha (antes distribuídos em várias normas), cancelando e substituindo a NBR 15718:2009 e outras três normas correlatas.'},
   ]},
 ];
 let _filtroNorma='';
@@ -3159,6 +3175,9 @@ function orgFonte(org){
   if(o.includes('IEEE')) return 'IEEE';
   if(o.includes('NETA')) return 'NETA';
   if(o.includes('MTE')) return 'gov.br';
+  if(o.includes('INMETRO')) return 'Inmetro';
+  if(o.includes('OIML')) return 'OIML';
+  if(o.includes('NFPA')) return 'NFPA';
   return 'fonte oficial';
 }
 function urlNormaOficial(n){
@@ -3169,6 +3188,9 @@ function urlNormaOficial(n){
   if(o.includes('IEEE')) return 'https://standards.ieee.org/search/?q='+cod;
   if(o.includes('NETA')) return 'https://www.netaworld.org/standards';
   if(o.includes('MTE'))  return 'https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/participacao-social/conselhos-e-orgaos-colegiados/comissao-tripartite-partitaria-permanente/normas-regulamentadoras';
+  if(o.includes('INMETRO')) return 'https://www.gov.br/inmetro/pt-br/centrais-de-conteudo/documentos-cgcre-abnt-nbr-iso-iec-17025';
+  if(o.includes('OIML'))  return 'https://www.oiml.org/en/publications/recommendations';
+  if(o.includes('NFPA'))  return 'https://www.nfpa.org/codes-and-standards/nfpa-70e-standard-development/70e';
   return 'https://www.google.com/search?q='+cod+'+norma';
 }
 function renderNormasLista(){
