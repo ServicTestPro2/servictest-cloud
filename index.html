@@ -1886,22 +1886,25 @@ function calcSP(){
 }
 
 /* ---------- Ponto a Ponto de Cabos ---------- */
-function ppcVazio(){return {cabo:'',form:'',de:'',para:'',funcao:'',comp:'',conf:''};}
+function ppcVazio(){return {rev:'',tag:'',form:'',dist:'',origTag:'',origLocal:'',destTag:'',destLocal:'',servico:'',conf:''};}
 function renderPPC(){
   const s=E('ppc',{cabos:[ppcVazio(),ppcVazio()]});
-  $('#main').innerHTML=header('Ponto a Ponto de Cabos','Verificação de identificação, formação, função e continuidade — conforme projeto executivo','NBR 5410')+cadResumo('ppc')+`
+  $('#main').innerHTML=header('Ponto a Ponto de Cabos','Verificação de identificação, formação, origem/destino e continuidade — conforme lista de cabos do projeto executivo','NBR 5410')+cadResumo('ppc')+`
   <div class="card">
     <h3>🔌 Lista de Cabos</h3>
-    <div class="hint">Preencha os dados de cada cabo conforme a lista de cabos do projeto executivo e marque a conformidade após a verificação ponto a ponto em campo. Clique no botão da coluna "Conforme" para alternar entre <b>Pendente → Conforme → Não Conforme</b>.</div>
+    <div class="hint">Preencha os dados de cada condutor conforme a lista de cabos do projeto executivo (REV., TAG, formação, distância, origem e destino) e marque a conformidade após a verificação ponto a ponto em campo. Clique no botão da coluna "Conforme" para alternar entre <b>Pendente → Conforme → Não Conforme</b>.</div>
     <div style="overflow-x:auto">
     <table class="ppc-tbl">
       <thead><tr>
-        <th>Nº Cabo</th>
-        <th>Formação (mm²)</th>
-        <th>De</th>
-        <th>Para</th>
-        <th>Função</th>
-        <th>Comp. (m)</th>
+        <th>Rev.</th>
+        <th>Condutor — TAG</th>
+        <th>Condutor — Formação</th>
+        <th>Distância (m)</th>
+        <th>Origem — TAG</th>
+        <th>Origem — Local</th>
+        <th>Destino — TAG</th>
+        <th>Destino — Local</th>
+        <th>Serviço</th>
         <th>Conforme</th>
         <th style="width:36px"></th>
       </tr></thead>
@@ -1921,14 +1924,17 @@ function ppcConfInfo(conf){
 function ppcRow(c,i){
   const info=ppcConfInfo(c.conf);
   return `<tr>
-    <td><input class="ppc_f" data-k="cabo" data-i="${i}" value="${c.cabo||''}"></td>
+    <td><input class="ppc_f" data-k="rev" data-i="${i}" value="${c.rev||''}" style="min-width:40px;max-width:56px"></td>
+    <td><input class="ppc_f" data-k="tag" data-i="${i}" value="${c.tag||''}"></td>
     <td><input class="ppc_f" data-k="form" data-i="${i}" value="${c.form||''}"></td>
-    <td><input class="ppc_f" data-k="de" data-i="${i}" value="${c.de||''}"></td>
-    <td><input class="ppc_f" data-k="para" data-i="${i}" value="${c.para||''}"></td>
-    <td><input class="ppc_f" data-k="funcao" data-i="${i}" value="${c.funcao||''}"></td>
-    <td><input class="ppc_f" data-k="comp" data-i="${i}" value="${c.comp||''}"></td>
+    <td><input class="ppc_f" data-k="dist" data-i="${i}" value="${c.dist||''}" style="min-width:56px;max-width:80px"></td>
+    <td><input class="ppc_f" data-k="origTag" data-i="${i}" value="${c.origTag||''}"></td>
+    <td><input class="ppc_f" data-k="origLocal" data-i="${i}" value="${c.origLocal||''}"></td>
+    <td><input class="ppc_f" data-k="destTag" data-i="${i}" value="${c.destTag||''}"></td>
+    <td><input class="ppc_f" data-k="destLocal" data-i="${i}" value="${c.destLocal||''}"></td>
+    <td><input class="ppc_f" data-k="servico" data-i="${i}" value="${c.servico||''}"></td>
     <td><button type="button" class="ppc-conf-btn ${info.cls}" data-i="${i}" data-conf="${c.conf||''}" onclick="ppcToggleConf(${i})">${info.label}</button></td>
-    <td><button type="button" class="btn btn-g" title="Remover cabo" style="padding:8px 9px" onclick="removePPC(${i})">🗑</button></td>
+    <td><button type="button" class="btn btn-g" title="Remover" style="padding:8px 9px" onclick="removePPC(${i})">🗑</button></td>
   </tr>`;
 }
 function ppcColeta(){
@@ -1952,7 +1958,7 @@ function ppcToggleConf(i){
   saveE('ppc',{cabos:ppcColeta()});
 }
 function calcPPC(){
-  const cabos=ppcColeta().filter(c=>c.cabo||c.de||c.para);
+  const cabos=ppcColeta().filter(c=>c.tag||c.origTag||c.destTag);
   let status='—';
   if(cabos.length){
     if(cabos.some(c=>c.conf==='nok')) status='REPROVADO';
@@ -1963,8 +1969,8 @@ function calcPPC(){
   $('#ppc_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) ainda <b>pendente(s)</b> de verificação ponto a ponto.</div>`:''}
     ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
-    <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Nº Cabo</th><th>De</th><th>Para</th><th>Função</th><th>Formação</th><th>Comp. (m)</th><th>Situação</th></tr></thead><tbody>
-    ${cabos.map(c=>`<tr><td>${c.cabo||'—'}</td><td>${c.de||'—'}</td><td>${c.para||'—'}</td><td>${c.funcao||'—'}</td><td>${c.form?c.form+' mm²':'—'}</td><td>${c.comp||'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
+    <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Rev.</th><th>TAG</th><th>Formação</th><th>Distância (m)</th><th>Origem</th><th>Destino</th><th>Serviço</th><th>Situação</th></tr></thead><tbody>
+    ${cabos.map(c=>`<tr><td>${c.rev||'—'}</td><td>${c.tag||'—'}</td><td>${c.form?c.form+' mm²':'—'}</td><td>${c.dist||'—'}</td><td>${c.origTag||'—'}${c.origLocal?' · '+c.origLocal:''}</td><td>${c.destTag||'—'}${c.destLocal?' · '+c.destLocal:''}</td><td>${c.servico||'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="btn-row">${prepLaudoBtn("Ponto a Ponto de Cabos","ppc",{status,cabos})}</div>`;
 }
@@ -2566,7 +2572,7 @@ const ANALISE={
  rt:'A relação de transformação foi medida com TTR em todas as derivações e fases. O desvio percentual entre a relação medida e a relação teórica (nominal) foi calculado e comparado ao limite definido para o transformador/TAP pelo fabricante e procedimento aplicável.',
  atr:'A resistência de aterramento foi medida pelo método da queda de potencial (regra dos 62%) com terrômetro. O valor obtido foi comparado ao critério específico da instalação e do projeto, sem usar 10 Ω/5 Ω como limite universal.',
  spda:'Conforme a NBR 5419:2026, o ensaio principal do SPDA é a verificação da continuidade elétrica das conexões, descidas e captores, realizada com mili/micro-ohmímetro, sendo a conformidade determinada pelo procedimento e pela documentação aplicável; não se usa 1,0 Ω como limite universal. A avaliação considerou o nível de proteção e a integridade/equipotencialização do sistema, além da identificação de pontos destoantes que indiquem conexões deficientes.',
- ppc:'A verificação ponto a ponto dos cabos foi realizada por continuidade elétrica e conferência documental/visual, comparando identificação (número/revisão), formação, tipo, condutores ocupados, extremidades (De/Para), função e percurso de cada cabo com a lista de cabos do projeto executivo. Cada cabo foi classificado individualmente como conforme, não conforme ou pendente de verificação, sendo a aprovação do ensaio condicionada à conformidade de todos os cabos avaliados.',
+ ppc:'A verificação ponto a ponto dos condutores foi realizada por continuidade elétrica e conferência documental/visual, comparando identificação (TAG, revisão), formação, distância e as extremidades de origem e destino (TAG e local) de cada condutor com a lista de cabos do projeto executivo. Cada condutor foi classificado individualmente como conforme, não conforme ou pendente de verificação, sendo a aprovação do ensaio condicionada à conformidade de todos os condutores avaliados.',
  motor:'A ficha de ensaio do motor consolidou: resistência de isolamento com cálculo dos índices IA (R1min/R30s, informativo) e IP (R10min/R1min, comparado a 2,0 como referência de classes B/F/H — não um requisito universal); medição de vibração nos pontos de mancal nas direções vertical, horizontal e axial, comparada ao limite do tipo/porte/montagem da máquina conforme ISO 20816; e desbalanço de corrente entre fases pelo desvio máximo em relação à média. A aprovação considera IP, vibração e desbalanço de corrente apenas quando um critério foi de fato definido para cada um — sem critério, o item fica informativo/inconclusivo, não aprovado por padrão.',
  mano:'A calibração do manômetro foi realizada por comparação com padrão rastreável em pontos crescentes e decrescentes da faixa. Calcularam-se o erro percentual referido ao fundo de escala e a histerese (diferença entre as curvas), comparados à classe de exatidão do instrumento conforme NBR ISO/IEC 17025.',
  termo:'O termômetro/sensor PT-100 foi verificado por comparação com padrão rastreável em pontos de referência definidos. O erro em °C de cada ponto foi calculado e comparado à tolerância da classe (PT-100 Classe A/B conforme IEC 60751).',
@@ -2728,7 +2734,7 @@ function laudoBuild(id){
   else if(l.key==='atr'){corpo=`<tr><td>Tipo / Método</td><td>${d.tipo} · ${d.met}</td></tr>`+d.pontos.map(p=>`<tr><td>${p.n}</td><td>${fmt(num(p.v))} Ω (lim. ${d.lim} Ω)</td></tr>`).join('');}
   else if(l.key==='ppc'){corpo=`<tr><td colspan="2" class="subhd">Lista de Cabos Verificados</td></tr>`+(d.cabos||[]).map(c=>{
     const sit=c.conf==='ok'?'CONFORME':c.conf==='nok'?'NÃO CONFORME':'PENDENTE';
-    return `<tr><td>${c.cabo||'—'}</td><td>${c.de||'—'} → ${c.para||'—'}${c.form?' · '+c.form+' mm²':''}${c.comp?' · Comp.: '+c.comp+' m':''} <b>(${sit})</b></td></tr>`;
+    return `<tr><td>${c.tag||'—'}</td><td>${c.origTag||'—'} → ${c.destTag||'—'}${c.form?' · '+c.form+' mm²':''}${c.dist?' · Dist.: '+c.dist+' m':''} <b>(${sit})</b></td></tr>`;
   }).join('');}
   else if(l.key==='spda'){corpo=`<tr><td>Nível de proteção</td><td>Classe ${d.classe}</td></tr>
     <tr><td>Critério de continuidade</td><td>≤ ${fmt(d.limCont||1,2)} Ω (ensaio principal NBR 5419:2026)</td></tr>
@@ -2747,8 +2753,12 @@ function laudoBuild(id){
   else if(l.key==='nivel'){corpo=`<tr><td>Pontos</td><td>${d.pts.join(' · ')}% · Tolerância ${d.tol}</td></tr>`+d.rows.filter(r=>r.errs.some(e=>e!=null)).map(r=>`<tr><td>${r.tag} (${r.tipo||'—'})</td><td>erros: ${r.errs.map(e=>e==null?'—':fmt(e,2)).join(' · ')} → ${r.ok}</td></tr>`).join('')+`<tr><td>Maior erro</td><td><b>${fmt(d.worst,2)}</b></td></tr>`;}
 
   const tc=(c.tema&&/^#[0-9a-fA-F]{6}$/.test(c.tema))?c.tema:'#1E4FD8';
+  // Ponto a Ponto de Cabos tem muitas colunas (Rev./TAG/Formação/Distância/
+  // Origem/Destino/Serviço/Conforme) — só este laudo é impresso em paisagem
+  // pra caber tudo sem espremer demais o texto.
+  const orientacaoPag=l.key==='ppc'?'landscape':'portrait';
   const LAUDO_CSS=`
-   @page{size:A4 portrait;margin:12mm}
+   @page{size:A4 ${orientacaoPag};margin:12mm}
    *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
    html,body{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
    body{color:#1a2238;font-size:11px;line-height:1.45}
@@ -2834,11 +2844,33 @@ function laudoBuild(id){
   `}`:''}
   <div class="sec">Resultados Medidos</div>
   ${l.key==='ppc'?`
-  <table class="res-tbl" style="table-layout:auto;width:100%"><thead><tr><th style="width:1%;white-space:nowrap">Nº Cabo</th><th style="width:1%;white-space:nowrap">Formação</th><th style="width:1%;white-space:nowrap">De</th><th style="width:1%;white-space:nowrap">Para</th><th>Função</th><th style="width:1%;white-space:nowrap">Comp. (m)</th><th style="width:1%;white-space:nowrap">Conforme</th></tr></thead><tbody>
+  <table class="res-tbl ppc-print" style="table-layout:auto;width:100%;font-size:9.5px"><thead><tr>
+    <th style="width:1%;white-space:nowrap">Rev.</th>
+    <th style="width:1%;white-space:nowrap">Condutor — TAG</th>
+    <th>Condutor — Formação</th>
+    <th style="width:1%;white-space:nowrap">Distância (m)</th>
+    <th style="width:1%;white-space:nowrap">Origem — TAG</th>
+    <th>Origem — Local</th>
+    <th style="width:1%;white-space:nowrap">Destino — TAG</th>
+    <th>Destino — Local</th>
+    <th>Serviço</th>
+    <th style="width:1%;white-space:nowrap">Conforme</th>
+  </tr></thead><tbody>
   ${(d.cabos||[]).map(cb=>{
     const sit=cb.conf==='ok'?'✔ Conforme':cb.conf==='nok'?'✘ Não Conforme':'— Pendente';
     const cor=cb.conf==='ok'?'#0d8a4f':cb.conf==='nok'?'#c52b2b':'#65708c';
-    return `<tr><td style="white-space:nowrap">${cb.cabo||'—'}</td><td style="white-space:nowrap">${cb.form?cb.form+' mm²':'—'}</td><td style="white-space:nowrap">${cb.de||'—'}</td><td style="white-space:nowrap">${cb.para||'—'}</td><td>${cb.funcao||'—'}</td><td style="white-space:nowrap">${cb.comp||'—'}</td><td style="white-space:nowrap;color:${cor};font-weight:700">${sit}</td></tr>`;
+    return `<tr>
+      <td style="white-space:nowrap">${cb.rev||'—'}</td>
+      <td style="white-space:nowrap">${cb.tag||'—'}</td>
+      <td>${cb.form||'—'}</td>
+      <td style="white-space:nowrap">${cb.dist||'—'}</td>
+      <td style="white-space:nowrap">${cb.origTag||'—'}</td>
+      <td>${cb.origLocal||'—'}</td>
+      <td style="white-space:nowrap">${cb.destTag||'—'}</td>
+      <td>${cb.destLocal||'—'}</td>
+      <td>${cb.servico||'—'}</td>
+      <td style="white-space:nowrap;color:${cor};font-weight:700">${sit}</td>
+    </tr>`;
   }).join('')}
   </tbody></table>
   `:`<table class="res-tbl kv">${corpo}</table>`}
