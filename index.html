@@ -1981,15 +1981,20 @@ function ppcToggleConf(i){
 function calcPPC(){
   const cabos=ppcColeta().filter(c=>c.tag||c.origTag||c.destTag);
   let status='—';
+  let pendentes=0;
   if(cabos.length){
-    if(cabos.some(c=>c.conf==='nok')) status='REPROVADO';
-    else if(cabos.some(c=>c.conf!=='ok')) status='ATENÇÃO';
+    const avaliados=cabos.filter(c=>c.conf==='ok'||c.conf==='nok');
+    const noks=avaliados.filter(c=>c.conf==='nok');
+    pendentes=cabos.length-avaliados.length;
+    if(avaliados.length && noks.length===avaliados.length) status='REPROVADO';
+    else if(noks.length>0) status='ATENÇÃO';
     else status='APROVADO';
   }
   saveE('ppc',{cabos:ppcColeta()});
   $('#ppc_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
-    ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) ainda <b>pendente(s)</b> de verificação ponto a ponto.</div>`:''}
-    ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
+    ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
+    ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> todos os cabos avaliados foram marcados como <b>não conforme(s)</b> — revisar identificação, continuidade ou percurso.</div>`:''}
+    ${pendentes>0?`<div class="hint" style="background:var(--muted-bg);border-left:3px solid var(--muted);color:var(--muted)">— ${pendentes} cabo(s) ainda <b>pendente(s)</b> de verificação ponto a ponto (não afeta o resultado final).</div>`:''}
     <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Rev.</th><th>TAG</th><th>Formação</th><th>Distância (m)</th><th>Origem</th><th>Destino</th><th>Serviço</th><th>Situação</th></tr></thead><tbody>
     ${cabos.map(c=>`<tr><td>${c.rev||'—'}</td><td>${c.tag||'—'}</td><td>${c.form?c.form+' mm²':'—'}</td><td>${c.dist||'—'}</td><td>${c.origTag||'—'}${c.origLocal?' · '+c.origLocal:''}</td><td>${c.destTag||'—'}${c.destLocal?' · '+c.destLocal:''}</td><td>${c.servico||'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
     </tbody></table></div>
