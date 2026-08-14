@@ -2789,6 +2789,9 @@ function laudoBuild(id){
    .matrix .fcol{text-align:left;font-weight:600;white-space:nowrap;font-size:9px}
    .matrix th{background:${tc};color:#fff}
    .res-tbl td:first-child{background:#f5f7fc;font-weight:600}
+   .ppc-print td:first-child{background:transparent;font-weight:400}
+   .ppc-print th,.ppc-print td{font-size:8.5px;line-height:1.35;padding:4px 5px;word-break:break-word}
+   .ppc-print th{font-size:8.5px;letter-spacing:0}
    .norm{background:#f0f5ff;border-left:3px solid ${tc};padding:8px 11px;font-size:10px;border-radius:0 4px 4px 0;margin:6px 0}
    .chart{text-align:center;margin:10px 0}.chart img{max-width:90%;height:auto;object-fit:contain;border:1px solid #e2e7f2;border-radius:6px}
    .chart2{display:flex;gap:8px;justify-content:center}.chart2 img{max-width:46%}
@@ -2844,32 +2847,38 @@ function laudoBuild(id){
   `}`:''}
   <div class="sec">Resultados Medidos</div>
   ${l.key==='ppc'?`
-  <table class="res-tbl ppc-print" style="table-layout:auto;width:100%;font-size:9.5px"><thead><tr>
-    <th style="width:1%;white-space:nowrap">Rev.</th>
-    <th style="width:1%;white-space:nowrap">Condutor — TAG</th>
+  <table class="res-tbl ppc-print" style="table-layout:fixed;width:100%">
+  <colgroup>
+    <col style="width:3.5%"><col style="width:8%"><col style="width:15%"><col style="width:6%">
+    <col style="width:8%"><col style="width:14%"><col style="width:8%"><col style="width:14%">
+    <col style="width:16%"><col style="width:7.5%">
+  </colgroup>
+  <thead><tr>
+    <th>Rev.</th>
+    <th>Condutor — TAG</th>
     <th>Condutor — Formação</th>
-    <th style="width:1%;white-space:nowrap">Distância (m)</th>
-    <th style="width:1%;white-space:nowrap">Origem — TAG</th>
+    <th>Distância (m)</th>
+    <th>Origem — TAG</th>
     <th>Origem — Local</th>
-    <th style="width:1%;white-space:nowrap">Destino — TAG</th>
+    <th>Destino — TAG</th>
     <th>Destino — Local</th>
     <th>Serviço</th>
-    <th style="width:1%;white-space:nowrap">Conforme</th>
+    <th>Conforme</th>
   </tr></thead><tbody>
   ${(d.cabos||[]).map(cb=>{
     const sit=cb.conf==='ok'?'✔ Conforme':cb.conf==='nok'?'✘ Não Conforme':'— Pendente';
     const cor=cb.conf==='ok'?'#0d8a4f':cb.conf==='nok'?'#c52b2b':'#65708c';
     return `<tr>
-      <td style="white-space:nowrap">${cb.rev||'—'}</td>
-      <td style="white-space:nowrap">${cb.tag||'—'}</td>
+      <td>${cb.rev||'—'}</td>
+      <td>${cb.tag||'—'}</td>
       <td>${cb.form||'—'}</td>
-      <td style="white-space:nowrap">${cb.dist||'—'}</td>
-      <td style="white-space:nowrap">${cb.origTag||'—'}</td>
+      <td>${cb.dist||'—'}</td>
+      <td>${cb.origTag||'—'}</td>
       <td>${cb.origLocal||'—'}</td>
-      <td style="white-space:nowrap">${cb.destTag||'—'}</td>
+      <td>${cb.destTag||'—'}</td>
       <td>${cb.destLocal||'—'}</td>
       <td>${cb.servico||'—'}</td>
-      <td style="white-space:nowrap;color:${cor};font-weight:700">${sit}</td>
+      <td style="color:${cor};font-weight:700">${sit}</td>
     </tr>`;
   }).join('')}
   </tbody></table>
