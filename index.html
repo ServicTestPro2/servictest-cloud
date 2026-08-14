@@ -1923,19 +1923,40 @@ function ppcConfInfo(conf){
 }
 function ppcRow(c,i){
   const info=ppcConfInfo(c.conf);
+  const nav=' onkeydown="ppcNavKey(event)" onfocus="ppcFocusScroll(this)"';
   return `<tr>
-    <td><input class="ppc_f" data-k="rev" data-i="${i}" value="${c.rev||''}" style="min-width:40px;max-width:56px"></td>
-    <td><input class="ppc_f" data-k="tag" data-i="${i}" value="${c.tag||''}"></td>
-    <td><input class="ppc_f" data-k="form" data-i="${i}" value="${c.form||''}"></td>
-    <td><input class="ppc_f" data-k="dist" data-i="${i}" value="${c.dist||''}" style="min-width:56px;max-width:80px"></td>
-    <td><input class="ppc_f" data-k="origTag" data-i="${i}" value="${c.origTag||''}"></td>
-    <td><input class="ppc_f" data-k="origLocal" data-i="${i}" value="${c.origLocal||''}"></td>
-    <td><input class="ppc_f" data-k="destTag" data-i="${i}" value="${c.destTag||''}"></td>
-    <td><input class="ppc_f" data-k="destLocal" data-i="${i}" value="${c.destLocal||''}"></td>
-    <td><input class="ppc_f" data-k="servico" data-i="${i}" value="${c.servico||''}"></td>
+    <td><input class="ppc_f" data-k="rev" data-i="${i}" value="${c.rev||''}" style="min-width:40px;max-width:56px"${nav}></td>
+    <td><input class="ppc_f" data-k="tag" data-i="${i}" value="${c.tag||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="form" data-i="${i}" value="${c.form||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="dist" data-i="${i}" value="${c.dist||''}" style="min-width:56px;max-width:80px"${nav}></td>
+    <td><input class="ppc_f" data-k="origTag" data-i="${i}" value="${c.origTag||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="origLocal" data-i="${i}" value="${c.origLocal||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="destTag" data-i="${i}" value="${c.destTag||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="destLocal" data-i="${i}" value="${c.destLocal||''}"${nav}></td>
+    <td><input class="ppc_f" data-k="servico" data-i="${i}" value="${c.servico||''}"${nav}></td>
     <td><button type="button" class="ppc-conf-btn ${info.cls}" data-i="${i}" data-conf="${c.conf||''}" onclick="ppcToggleConf(${i})">${info.label}</button></td>
     <td><button type="button" class="btn btn-g" title="Remover" style="padding:8px 9px" onclick="removePPC(${i})">🗑</button></td>
   </tr>`;
+}
+function ppcFocusScroll(el){
+  el.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+}
+function ppcNavKey(e){
+  if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
+  const el=e.target;
+  const atEnd=el.selectionStart===el.value.length && el.selectionEnd===el.value.length;
+  const atStart=el.selectionStart===0 && el.selectionEnd===0;
+  if(e.key==='ArrowRight' && !atEnd) return;
+  if(e.key==='ArrowLeft' && !atStart) return;
+  const tr=el.closest('tr'); if(!tr) return;
+  const fields=[...tr.querySelectorAll('.ppc_f')];
+  const idx=fields.indexOf(el);
+  const next=e.key==='ArrowRight'?fields[idx+1]:fields[idx-1];
+  if(!next) return;
+  e.preventDefault();
+  next.focus();
+  const pos=e.key==='ArrowRight'?next.value.length:0;
+  next.setSelectionRange(pos,pos);
 }
 function ppcColeta(){
   return [...document.querySelectorAll('#ppc_rows tr')].map(tr=>{
