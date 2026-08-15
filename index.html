@@ -1942,8 +1942,20 @@ function ppcFocusScroll(el){
   el.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
 }
 function ppcNavKey(e){
-  if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
   const el=e.target;
+  if(e.key==='ArrowUp' || e.key==='ArrowDown'){
+    const k=el.dataset.k;
+    const i=parseInt(el.dataset.i,10);
+    const targetI=e.key==='ArrowDown'?i+1:i-1;
+    const target=document.querySelector(`.ppc_f[data-k="${k}"][data-i="${targetI}"]`);
+    if(!target) return;
+    e.preventDefault();
+    target.focus();
+    const pos=target.value.length;
+    target.setSelectionRange(pos,pos);
+    return;
+  }
+  if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
   const atEnd=el.selectionStart===el.value.length && el.selectionEnd===el.value.length;
   const atStart=el.selectionStart===0 && el.selectionEnd===0;
   if(e.key==='ArrowRight' && !atEnd) return;
