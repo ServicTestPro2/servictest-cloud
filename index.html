@@ -210,6 +210,7 @@ tr:hover td{background:var(--muted-bg)}
       <a data-pg="atr"><span class="ic">⏚</span> Aterramento</a>
       <a data-pg="spda"><span class="ic">🗲</span> SPDA</a>
       <a data-pg="ppc"><span class="ic">🔌</span> Ponto a Ponto de Cabos</a>
+      <a data-pg="iscabo"><span class="ic">🧪</span> Isolamento — Cabos Elétricos</a>
       <div class="nav-lbl">Instrumentação & Motor</div>
       <a data-pg="motor"><span class="ic">⚙️</span> Ficha de Motor</a>
       <a data-pg="mano"><span class="ic">🧭</span> Manômetro</a>
@@ -922,7 +923,7 @@ function normativaBanner(){
 setTimeout(normativaBanner,0);
 
 /* ============ ROUTER ============ */
-const PAGES = {dash:renderDash, cad:renderCad, ri:renderRI, rohm:renderROhm, rc:renderRC, ta:renderTA, rt:renderRT, atr:renderAtr, spda:renderSPDA, ppc:renderPPC, motor:renderMotor, mano:renderMano, termo:renderTermo, transd:renderTransd, press:renderPress, nivel:renderNivel, fp:renderFP, dp:renderDP, oleo:renderOleo, laudos:renderLaudos, config:renderConfig, normas:renderNormas};
+const PAGES = {dash:renderDash, cad:renderCad, ri:renderRI, rohm:renderROhm, rc:renderRC, ta:renderTA, rt:renderRT, atr:renderAtr, spda:renderSPDA, ppc:renderPPC, iscabo:renderIsCabo, motor:renderMotor, mano:renderMano, termo:renderTermo, transd:renderTransd, press:renderPress, nivel:renderNivel, fp:renderFP, dp:renderDP, oleo:renderOleo, laudos:renderLaudos, config:renderConfig, normas:renderNormas};
 function go(pg){
   if(chartRef2){try{chartRef2.destroy();}catch(_){} chartRef2=null;}
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('active',a.dataset.pg===pg));
@@ -1092,14 +1093,14 @@ const LABEL_ENSAIO={
   ri:'Resistência de Isolamento', rohm:'Resistência Ôhmica', rc:'Resistência de Contato',
   fp:'Fator de Potência', dp:'Descargas Parciais', oleo:'Rigidez Dielétrica do Óleo',
   ta:'Tensão Aplicada', rt:'Relação de Transformação', atr:'Resistência de Aterramento',
-  spda:'SPDA', ppc:'Ponto a Ponto de Cabos', motor:'Ficha de Motor',
+  spda:'SPDA', ppc:'Ponto a Ponto de Cabos', iscabo:'Resistência de Isolamento — Cabos Elétricos', motor:'Ficha de Motor',
   mano:'Calibração de Manômetro', termo:'Calibração de Termômetro', transd:'Calibração de Transdutor',
   press:'Calibração de Pressostato', nivel:'Calibração de Nível'
 };
 /* Sigla curta de cada tipo de ensaio — usada na numeração automática (ex.: "RI" em 2026-RI-001-00) */
 const SIGLA_ENSAIO={
   ri:'RI', rohm:'RO', rc:'RC', fp:'FP', dp:'DP', oleo:'OL',
-  ta:'TA', rt:'RT', atr:'AT', spda:'SP', ppc:'PC', motor:'MT',
+  ta:'TA', rt:'RT', atr:'AT', spda:'SP', ppc:'PC', iscabo:'IS', motor:'MT',
   mano:'MN', termo:'TE', transd:'TR', press:'PR', nivel:'NV'
 };
 /* Próximo número de laudo, sempre no formato ANO-SIGLA-SEQUENCIAL-REVISÃO
@@ -2013,6 +2014,135 @@ function calcPPC(){
     <div class="btn-row">${prepLaudoBtn("Ponto a Ponto de Cabos","ppc",{status,cabos})}</div>`;
 }
 
+/* ---------- Resistência de Isolamento — Cabos Elétricos ---------- */
+function isVazio(){return {rev:'',tag:'',form:'',origTag:'',destTag:'',servico:'',ri:'',riUn:'M',conf:''};}
+function isUnLabel(u){return u==='K'?'kΩ':u==='T'?'TΩ':'MΩ';}
+function renderIsCabo(){
+  const s=E('iscabo',{cabos:[isVazio(),isVazio()]});
+  $('#main').innerHTML=header('Resistência de Isolamento — Cabos Elétricos','Medição de resistência de isolamento por cabo (megômetro) — identificação, valor medido e conformidade','NBR 5410')+cadResumo('iscabo')+`
+  <div class="card">
+    <h3>🧪 Lista de Cabos — Isolamento</h3>
+    <div class="hint">Preencha a identificação de cada cabo e o valor medido de resistência de isolamento (com a unidade — kΩ/MΩ/TΩ) e marque a conformidade após a medição em campo. Clique no botão da coluna "Conforme" para alternar entre <b>Pendente → Conforme → Não Conforme</b>.</div>
+    <div style="overflow-x:auto">
+    <table class="ppc-tbl">
+      <thead><tr>
+        <th>Rev.</th>
+        <th>Condutor — TAG</th>
+        <th>Formação</th>
+        <th>Origem</th>
+        <th>Destino</th>
+        <th>Serviço</th>
+        <th>Resistência de Isolamento</th>
+        <th>Conforme</th>
+        <th style="width:36px"></th>
+      </tr></thead>
+      <tbody id="is_rows">${s.cabos.map((c,i)=>isRow(c,i)).join('')}</tbody>
+    </table>
+    </div>
+    <div class="row-add"><button class="btn btn-g" onclick="addIsCabo()">＋ Adicionar cabo</button></div>
+    <div class="btn-row"><button class="btn btn-p" onclick="calcIsCabo()">⚙ Calcular</button></div>
+  </div>
+  <div class="card" id="is_out"><h3>Resultado</h3><div class="sub">Preencha a lista de cabos e marque a conformidade de cada um.</div></div>`;
+}
+function isRow(c,i){
+  const info=ppcConfInfo(c.conf);
+  const nav=' onkeydown="isNavKey(event)" onfocus="isFocusScroll(this)"';
+  return `<tr>
+    <td><input class="is_f" data-k="rev" data-i="${i}" value="${c.rev||''}" style="min-width:40px;max-width:56px"${nav}></td>
+    <td><input class="is_f" data-k="tag" data-i="${i}" value="${c.tag||''}"${nav}></td>
+    <td><input class="is_f" data-k="form" data-i="${i}" value="${c.form||''}"${nav}></td>
+    <td><input class="is_f" data-k="origTag" data-i="${i}" value="${c.origTag||''}"${nav}></td>
+    <td><input class="is_f" data-k="destTag" data-i="${i}" value="${c.destTag||''}"${nav}></td>
+    <td><input class="is_f" data-k="servico" data-i="${i}" value="${c.servico||''}"${nav}></td>
+    <td><div style="display:flex;gap:4px;align-items:center">
+      <input class="is_f" data-k="ri" data-i="${i}" value="${c.ri||''}" inputmode="decimal" style="min-width:70px;max-width:110px"${nav}>
+      <select class="is_f" data-k="riUn" data-i="${i}" style="padding:6px 4px;font-size:12px;border-radius:6px">
+        <option value="K"${c.riUn==='K'?' selected':''}>kΩ</option>
+        <option value="M"${(!c.riUn||c.riUn==='M')?' selected':''}>MΩ</option>
+        <option value="T"${c.riUn==='T'?' selected':''}>TΩ</option>
+      </select>
+    </div></td>
+    <td><button type="button" class="ppc-conf-btn ${info.cls}" data-i="${i}" data-conf="${c.conf||''}" onclick="isToggleConf(${i})">${info.label}</button></td>
+    <td><button type="button" class="btn btn-g" title="Remover" style="padding:8px 9px" onclick="removeIsCabo(${i})">🗑</button></td>
+  </tr>`;
+}
+function isFocusScroll(el){
+  el.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+}
+function isNavKey(e){
+  const el=e.target;
+  if(e.key==='ArrowUp' || e.key==='ArrowDown'){
+    const k=el.dataset.k;
+    const i=parseInt(el.dataset.i,10);
+    const targetI=e.key==='ArrowDown'?i+1:i-1;
+    const target=document.querySelector(`.is_f[data-k="${k}"][data-i="${targetI}"]`);
+    if(!target) return;
+    e.preventDefault();
+    target.focus();
+    if(target.tagName!=='SELECT'){
+      const pos=target.value.length;
+      target.setSelectionRange(pos,pos);
+    }
+    return;
+  }
+  if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
+  const atEnd=el.selectionStart===el.value.length && el.selectionEnd===el.value.length;
+  const atStart=el.selectionStart===0 && el.selectionEnd===0;
+  if(e.key==='ArrowRight' && !atEnd) return;
+  if(e.key==='ArrowLeft' && !atStart) return;
+  const tr=el.closest('tr'); if(!tr) return;
+  const fields=[...tr.querySelectorAll('input.is_f')];
+  const idx=fields.indexOf(el);
+  const next=e.key==='ArrowRight'?fields[idx+1]:fields[idx-1];
+  if(!next) return;
+  e.preventDefault();
+  next.focus();
+  const pos=e.key==='ArrowRight'?next.value.length:0;
+  next.setSelectionRange(pos,pos);
+}
+function isColeta(){
+  return [...document.querySelectorAll('#is_rows tr')].map(tr=>{
+    const o={};
+    tr.querySelectorAll('.is_f').forEach(el=>o[el.dataset.k]=el.value);
+    const btn=tr.querySelector('.ppc-conf-btn');
+    o.conf=btn?(btn.dataset.conf||''):'';
+    return o;
+  });
+}
+function addIsCabo(){const c=isColeta();c.push(isVazio());saveE('iscabo',{cabos:c});renderIsCabo();}
+function removeIsCabo(i){const c=isColeta();c.splice(i,1);saveE('iscabo',{cabos:c});renderIsCabo();}
+function isToggleConf(i){
+  const btn=document.querySelector(`#is_rows .ppc-conf-btn[data-i="${i}"]`);
+  if(!btn) return;
+  const cur=btn.dataset.conf||'';
+  const next = cur===''?'ok':cur==='ok'?'nok':'';
+  const info=ppcConfInfo(next);
+  btn.dataset.conf=next; btn.className='ppc-conf-btn '+info.cls; btn.textContent=info.label;
+  saveE('iscabo',{cabos:isColeta()});
+}
+function calcIsCabo(){
+  const cabos=isColeta().filter(c=>c.tag||c.origTag||c.destTag);
+  let status='—';
+  let pendentes=0;
+  if(cabos.length){
+    const avaliados=cabos.filter(c=>c.conf==='ok'||c.conf==='nok');
+    const noks=avaliados.filter(c=>c.conf==='nok');
+    pendentes=cabos.length-avaliados.length;
+    if(avaliados.length && noks.length===avaliados.length) status='REPROVADO';
+    else if(noks.length>0) status='ATENÇÃO';
+    else status='APROVADO';
+  }
+  saveE('iscabo',{cabos:isColeta()});
+  $('#is_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
+    ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar isolamento.</div>`:''}
+    ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> todos os cabos avaliados foram marcados como <b>não conforme(s)</b> — revisar isolamento.</div>`:''}
+    ${pendentes>0?`<div class="hint" style="background:var(--muted-bg);border-left:3px solid var(--muted);color:var(--muted)">— ${pendentes} cabo(s) ainda <b>pendente(s)</b> de medição (não afeta o resultado final).</div>`:''}
+    <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Rev.</th><th>TAG</th><th>Formação</th><th>Origem</th><th>Destino</th><th>Serviço</th><th>Resist. Isolamento</th><th>Situação</th></tr></thead><tbody>
+    ${cabos.map(c=>`<tr><td>${c.rev||'—'}</td><td>${c.tag||'—'}</td><td>${c.form||'—'}</td><td>${c.origTag||'—'}</td><td>${c.destTag||'—'}</td><td>${c.servico||'—'}</td><td>${c.ri?c.ri+' '+isUnLabel(c.riUn):'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="btn-row">${prepLaudoBtn("Resistência de Isolamento — Cabos Elétricos","iscabo",{status,cabos})}</div>`;
+}
+
 function renderCad(){
   // Lista de clientes cadastrados
   const linhas = CLIENTES.length ? CLIENTES.map(c=>`<tr${c.id===CAD.id?' style="background:var(--hint-bg)"':''}>
@@ -2176,6 +2306,7 @@ function renderDash(){
          ['atr','⏚','Aterramento','NBR 5419 / NBR 15749 · Ω malha'],
          ['spda','🗲','SPDA','NBR 5419 · Continuidade & resistência'],
          ['ppc','🔌','Ponto a Ponto de Cabos','NBR 5410 · Identificação, formação & continuidade'],
+         ['iscabo','🧪','Isolamento — Cabos Elétricos','NBR 5410 / IEC 60502 · Resistência de isolamento por cabo'],
          ['motor','⚙️','Ficha de Motor','IEEE 43 / NBR 17094 / ISO 20816'],
          ['mano','🧭','Manômetro','ISO/IEC 17025 · Erro F.E. & histerese'],
          ['termo','🌡️','Termômetro / PT-100','IEC 60751 · Erro °C'],
@@ -2542,6 +2673,7 @@ const NORMAS={
  atr:{n:'ABNT NBR 15749 / NBR 15751 / NBR 14039 / IEEE 81, conforme aplicação',c:'R=V/I no método de queda de potencial. Limite depende do sistema e projeto; não usar 10 Ω/5 Ω universalmente. Subestações exigem avaliação de segurança da malha quando aplicável.'},
  spda:{n:'ABNT NBR 5419:2026 (Partes 1 a 4), observando transição aplicável',c:'Continuidade e integridade do PDA/SPDA devem ser verificadas conforme procedimento e documentação. Não usar 1 Ω como limite universal.'},
  ppc:{n:'ABNT NBR 5410 / ABNT NBR 14039 / projeto executivo, conforme tensão',c:'Verificação ponto a ponto, continuidade, identificação e correspondência com projeto.'},
+ iscabo:{n:'ABNT NBR 5410 / IEC 60502 / IEC 60840, conforme tipo e tensão do cabo',c:'Resistência de isolamento medida por megômetro entre condutor e terra (ou entre condutores). O valor mínimo aceitável depende da tensão nominal, tipo de isolação e comprimento do cabo — não há limite universal; o resultado por cabo é definido manualmente pelo técnico (Conforme/Não Conforme) conforme critério do projeto/fabricante.'},
  motor:{n:'IEEE 43-2013 / IEC 60034 / ISO 20816, conforme máquina',c:'IA=R1/R30 e PI=R10/R1. PI deve seguir classe/procedimento. Vibração deve ser classificada pela parte aplicável da ISO 20816 e características da máquina. Desbalanço de corrente pelo máximo desvio da média.'},
  mano:{n:'ABNT NBR ISO/IEC 17025 + especificação do instrumento / procedimento de calibração',c:'Erro = indicação−referência. Erro %FE = erro/FE×100 quando essa é a base definida. Histerese = diferença entre ciclos, também referida à base definida.'},
  termo:{n:'IEC 60751:2022 + ABNT NBR ISO/IEC 17025',c:'PT100 segue relação resistência-temperatura da IEC 60751 e classe de tolerância especificada. Erro = indicação−referência.'},
@@ -2774,6 +2906,10 @@ function laudoBuild(id){
     const sit=c.conf==='ok'?'CONFORME':c.conf==='nok'?'NÃO CONFORME':'PENDENTE';
     return `<tr><td>${c.tag||'—'}</td><td>${c.origTag||'—'} → ${c.destTag||'—'}${c.form?' · '+c.form+' mm²':''}${c.dist?' · Dist.: '+c.dist+' m':''} <b>(${sit})</b></td></tr>`;
   }).join('');}
+  else if(l.key==='iscabo'){corpo=`<tr><td colspan="2" class="subhd">Lista de Cabos — Resistência de Isolamento</td></tr>`+(d.cabos||[]).map(c=>{
+    const sit=c.conf==='ok'?'CONFORME':c.conf==='nok'?'NÃO CONFORME':'PENDENTE';
+    return `<tr><td>${c.tag||'—'}</td><td>${c.origTag||'—'} → ${c.destTag||'—'}${c.ri?' · '+c.ri+' '+isUnLabel(c.riUn):''} <b>(${sit})</b></td></tr>`;
+  }).join('');}
   else if(l.key==='spda'){corpo=`<tr><td>Nível de proteção</td><td>Classe ${d.classe}</td></tr>
     <tr><td>Critério de continuidade</td><td>≤ ${fmt(d.limCont||1,2)} Ω (ensaio principal NBR 5419:2026)</td></tr>
     ${d.temDestoante?`<tr><td>Observação</td><td><b>Atenção:</b> ponto(s) de continuidade destoante(s) do conjunto — recomenda-se verificação da(s) conexão(ões).</td></tr>`:''}
@@ -2794,7 +2930,7 @@ function laudoBuild(id){
   // Ponto a Ponto de Cabos tem muitas colunas (Rev./TAG/Formação/Distância/
   // Origem/Destino/Serviço/Conforme) — só este laudo é impresso em paisagem
   // pra caber tudo sem espremer demais o texto.
-  const orientacaoPag=l.key==='ppc'?'landscape':'portrait';
+  const orientacaoPag=(l.key==='ppc'||l.key==='iscabo')?'landscape':'portrait';
   const LAUDO_CSS=`
    @page{size:A4 ${orientacaoPag};margin:12mm}
    *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
@@ -2873,7 +3009,7 @@ function laudoBuild(id){
   <div class="sec">Dados do Cliente e da Obra</div>
   <div class="grid2"><table class="kv"><tr><td>Cliente</td><td>${c.cliente}</td></tr><tr><td>CNPJ</td><td>${c.cnpjCli||'—'}</td></tr><tr><td>Obra</td><td>${c.obra||'—'}</td></tr><tr><td>Local</td><td>${c.local||'—'}</td></tr></table>
   <table class="kv"><tr><td>Cidade/UF</td><td>${c.cidade||'—'}</td></tr><tr><td>Data ensaio</td><td>${c.data}</td></tr><tr><td>Temperatura ambiente</td><td>${c.temp} °C</td></tr><tr><td>Umidade</td><td>${c.umid} %</td></tr></table></div>
-  ${l.key!=='ppc'?`
+  ${(l.key!=='ppc'&&l.key!=='iscabo')?`
   <div class="sec">${l.key==='spda'?'Edificação / Instalação':'Equipamento Sob Ensaio'}</div>
   ${l.key==='spda'?`
   <table class="kv kv-wide" style="width:100%"><tr><td>Edificação</td><td>${c.edif||'—'}</td></tr></table>
@@ -2916,6 +3052,37 @@ function laudoBuild(id){
       <td>${cb.destTag||'—'}</td>
       <td>${cb.destLocal||'—'}</td>
       <td>${cb.servico||'—'}</td>
+      <td style="color:${cor};font-weight:700">${sit}</td>
+    </tr>`;
+  }).join('')}
+  </tbody></table>
+  `:l.key==='iscabo'?`
+  <table class="res-tbl ppc-print" style="table-layout:fixed;width:100%">
+  <colgroup>
+    <col style="width:5%"><col style="width:12%"><col style="width:18%"><col style="width:12%">
+    <col style="width:12%"><col style="width:18%"><col style="width:13%"><col style="width:10%">
+  </colgroup>
+  <thead><tr>
+    <th>Rev.</th>
+    <th>Condutor — TAG</th>
+    <th>Formação</th>
+    <th>Origem</th>
+    <th>Destino</th>
+    <th>Serviço</th>
+    <th>Resistência de Isolamento</th>
+    <th>Conforme</th>
+  </tr></thead><tbody>
+  ${(d.cabos||[]).map(cb=>{
+    const sit=cb.conf==='ok'?'✔ Conforme':cb.conf==='nok'?'✘ Não Conforme':'— Pendente';
+    const cor=cb.conf==='ok'?'#0d8a4f':cb.conf==='nok'?'#c52b2b':'#65708c';
+    return `<tr>
+      <td>${cb.rev||'—'}</td>
+      <td>${cb.tag||'—'}</td>
+      <td>${cb.form||'—'}</td>
+      <td>${cb.origTag||'—'}</td>
+      <td>${cb.destTag||'—'}</td>
+      <td>${cb.servico||'—'}</td>
+      <td>${cb.ri?cb.ri+' '+isUnLabel(cb.riUn):'—'}</td>
       <td style="color:${cor};font-weight:700">${sit}</td>
     </tr>`;
   }).join('')}
