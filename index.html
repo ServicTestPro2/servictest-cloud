@@ -3019,7 +3019,7 @@ function laudoBuild(id){
   <div class="sec">Dados do Cliente e da Obra</div>
   <div class="grid2"><table class="kv"><tr><td>Cliente</td><td>${c.cliente}</td></tr><tr><td>CNPJ</td><td>${c.cnpjCli||'—'}</td></tr><tr><td>Obra</td><td>${c.obra||'—'}</td></tr><tr><td>Local</td><td>${c.local||'—'}</td></tr></table>
   <table class="kv"><tr><td>Cidade/UF</td><td>${c.cidade||'—'}</td></tr><tr><td>Data ensaio</td><td>${c.data}</td></tr><tr><td>Temperatura ambiente</td><td>${c.temp} °C</td></tr><tr><td>Umidade</td><td>${c.umid} %</td></tr></table></div>
-  ${(l.key!=='ppc'&&l.key!=='iscabo')?`
+  ${l.key!=='ppc'?`
   <div class="sec">${l.key==='spda'?'Edificação / Instalação':'Equipamento Sob Ensaio'}</div>
   ${l.key==='spda'?`
   <table class="kv kv-wide" style="width:100%"><tr><td>Edificação</td><td>${c.edif||'—'}</td></tr></table>
