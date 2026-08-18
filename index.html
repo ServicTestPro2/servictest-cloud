@@ -2015,8 +2015,9 @@ function calcPPC(){
 }
 
 /* ---------- Resistência de Isolamento — Cabos Elétricos ---------- */
-function isVazio(){return {rev:'',tag:'',form:'',origTag:'',destTag:'',servico:'',ri:'',riUn:'M',conf:''};}
+function isVazio(){return {rev:'',tag:'',form:'',origTag:'',destTag:'',servico:'',tensao:'',ri:'',riUn:'M',conf:''};}
 function isUnLabel(u){return u==='K'?'kΩ':u==='T'?'TΩ':'MΩ';}
+const IS_TENSOES=['0,5','1','2,5','5','10'];
 function renderIsCabo(){
   const s=E('iscabo',{cabos:[isVazio(),isVazio()]});
   $('#main').innerHTML=header('Resistência de Isolamento — Cabos Elétricos','Medição de resistência de isolamento por cabo (megômetro) — identificação, valor medido e conformidade','NBR 5410')+cadResumo('iscabo')+`
@@ -2032,6 +2033,7 @@ function renderIsCabo(){
         <th>Origem</th>
         <th>Destino</th>
         <th>Serviço</th>
+        <th>Tensão de Ensaio</th>
         <th>Resistência de Isolamento</th>
         <th>Conforme</th>
         <th style="width:36px"></th>
@@ -2054,6 +2056,10 @@ function isRow(c,i){
     <td><input class="is_f" data-k="origTag" data-i="${i}" value="${c.origTag||''}"${nav}></td>
     <td><input class="is_f" data-k="destTag" data-i="${i}" value="${c.destTag||''}"${nav}></td>
     <td><input class="is_f" data-k="servico" data-i="${i}" value="${c.servico||''}"${nav}></td>
+    <td><select class="is_f" data-k="tensao" data-i="${i}" style="padding:6px 4px;font-size:12px;border-radius:6px">
+      <option value=""${!c.tensao?' selected':''}>—</option>
+      ${IS_TENSOES.map(v=>`<option value="${v}"${c.tensao===v?' selected':''}>${v} kV</option>`).join('')}
+    </select></td>
     <td><div style="display:flex;gap:4px;align-items:center">
       <input class="is_f" data-k="ri" data-i="${i}" value="${c.ri||''}" inputmode="decimal" style="min-width:70px;max-width:110px"${nav}>
       <select class="is_f" data-k="riUn" data-i="${i}" style="padding:6px 4px;font-size:12px;border-radius:6px">
@@ -2137,8 +2143,8 @@ function calcIsCabo(){
     ${status==='ATENÇÃO'?`<div class="hint" style="background:var(--warn-bg);border-left:3px solid var(--warn);color:var(--warn)"><b>⚠ Atenção:</b> há cabo(s) marcado(s) como <b>não conforme(s)</b> — revisar isolamento.</div>`:''}
     ${status==='REPROVADO'?`<div class="hint" style="background:var(--fail-bg);border-left:3px solid var(--fail);color:var(--fail)"><b>✘ Reprovado:</b> todos os cabos avaliados foram marcados como <b>não conforme(s)</b> — revisar isolamento.</div>`:''}
     ${pendentes>0?`<div class="hint" style="background:var(--muted-bg);border-left:3px solid var(--muted);color:var(--muted)">— ${pendentes} cabo(s) ainda <b>pendente(s)</b> de medição (não afeta o resultado final).</div>`:''}
-    <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Rev.</th><th>TAG</th><th>Formação</th><th>Origem</th><th>Destino</th><th>Serviço</th><th>Resist. Isolamento</th><th>Situação</th></tr></thead><tbody>
-    ${cabos.map(c=>`<tr><td>${c.rev||'—'}</td><td>${c.tag||'—'}</td><td>${c.form||'—'}</td><td>${c.origTag||'—'}</td><td>${c.destTag||'—'}</td><td>${c.servico||'—'}</td><td>${c.ri?c.ri+' '+isUnLabel(c.riUn):'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
+    <div style="overflow-x:auto"><table class="res-tbl"><thead><tr><th>Rev.</th><th>TAG</th><th>Formação</th><th>Origem</th><th>Destino</th><th>Serviço</th><th>Tensão Ensaio</th><th>Resist. Isolamento</th><th>Situação</th></tr></thead><tbody>
+    ${cabos.map(c=>`<tr><td>${c.rev||'—'}</td><td>${c.tag||'—'}</td><td>${c.form||'—'}</td><td>${c.origTag||'—'}</td><td>${c.destTag||'—'}</td><td>${c.servico||'—'}</td><td>${c.tensao?c.tensao+' kV':'—'}</td><td>${c.ri?c.ri+' '+isUnLabel(c.riUn):'—'}</td><td>${c.conf==='ok'?tag('APROVADO'):c.conf==='nok'?tag('REPROVADO'):'<span class="tag" style="background:var(--muted-bg);color:var(--muted)">Pendente</span>'}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="btn-row">${prepLaudoBtn("Resistência de Isolamento — Cabos Elétricos","iscabo",{status,cabos})}</div>`;
 }
@@ -3059,8 +3065,8 @@ function laudoBuild(id){
   `:l.key==='iscabo'?`
   <table class="res-tbl ppc-print" style="table-layout:fixed;width:100%">
   <colgroup>
-    <col style="width:5%"><col style="width:12%"><col style="width:18%"><col style="width:12%">
-    <col style="width:12%"><col style="width:18%"><col style="width:13%"><col style="width:10%">
+    <col style="width:4%"><col style="width:11%"><col style="width:15%"><col style="width:10%">
+    <col style="width:10%"><col style="width:16%"><col style="width:9%"><col style="width:13%"><col style="width:12%">
   </colgroup>
   <thead><tr>
     <th>Rev.</th>
@@ -3069,6 +3075,7 @@ function laudoBuild(id){
     <th>Origem</th>
     <th>Destino</th>
     <th>Serviço</th>
+    <th>Tensão de Ensaio</th>
     <th>Resistência de Isolamento</th>
     <th>Conforme</th>
   </tr></thead><tbody>
@@ -3082,6 +3089,7 @@ function laudoBuild(id){
       <td>${cb.origTag||'—'}</td>
       <td>${cb.destTag||'—'}</td>
       <td>${cb.servico||'—'}</td>
+      <td>${cb.tensao?cb.tensao+' kV':'—'}</td>
       <td>${cb.ri?cb.ri+' '+isUnLabel(cb.riUn):'—'}</td>
       <td style="color:${cor};font-weight:700">${sit}</td>
     </tr>`;
