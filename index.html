@@ -2016,7 +2016,7 @@ function calcPPC(){
 
 /* ---------- Resistência de Isolamento — Cabos Elétricos ---------- */
 function isVazio(){return {rev:'',tag:'',form:'',origTag:'',destTag:'',servico:'',tensao:'',ri:'',riUn:'M',conf:''};}
-function isUnLabel(u){return u==='K'?'kΩ':u==='T'?'TΩ':'MΩ';}
+function isUnLabel(u){return u==='K'?'kΩ':u==='G'?'GΩ':u==='T'?'TΩ':'MΩ';}
 const IS_TENSOES=['0,5','1','2,5','5','10'];
 function renderIsCabo(){
   const s=E('iscabo',{cabos:[isVazio(),isVazio()]});
@@ -2067,6 +2067,7 @@ function isRow(c,i){
       <select class="is_f" data-k="riUn" data-i="${i}" style="padding:6px 4px;font-size:12px;border-radius:6px">
         <option value="K"${c.riUn==='K'?' selected':''}>kΩ</option>
         <option value="M"${(!c.riUn||c.riUn==='M')?' selected':''}>MΩ</option>
+        <option value="G"${c.riUn==='G'?' selected':''}>GΩ</option>
         <option value="T"${c.riUn==='T'?' selected':''}>TΩ</option>
       </select>
     </div></td>
