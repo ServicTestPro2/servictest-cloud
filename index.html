@@ -2027,6 +2027,7 @@ function renderIsCabo(){
     <div style="overflow-x:auto">
     <table class="ppc-tbl">
       <thead><tr>
+        <th style="width:26px"></th>
         <th>Rev.</th>
         <th>Condutor — TAG</th>
         <th>Formação</th>
@@ -2050,6 +2051,7 @@ function isRow(c,i){
   const info=ppcConfInfo(c.conf);
   const nav=' onkeydown="isNavKey(event)" onfocus="isFocusScroll(this)"';
   return `<tr>
+    <td><button type="button" class="btn btn-g" title="Inserir linha em branco aqui" style="padding:2px 6px;font-size:11px;line-height:1.4;min-width:0" onclick="insertIsCabo(${i})">＋</button></td>
     <td><input class="is_f" data-k="rev" data-i="${i}" value="${c.rev||''}" style="min-width:40px;max-width:56px"${nav}></td>
     <td><input class="is_f" data-k="tag" data-i="${i}" value="${c.tag||''}"${nav}></td>
     <td><input class="is_f" data-k="form" data-i="${i}" value="${c.form||''}"${nav}></td>
@@ -2117,6 +2119,7 @@ function isColeta(){
 }
 function addIsCabo(){const c=isColeta();c.push(isVazio());saveE('iscabo',{cabos:c});renderIsCabo();}
 function removeIsCabo(i){const c=isColeta();c.splice(i,1);saveE('iscabo',{cabos:c});renderIsCabo();}
+function insertIsCabo(i){const c=isColeta();c.splice(i,0,isVazio());saveE('iscabo',{cabos:c});renderIsCabo();}
 function isToggleConf(i){
   const btn=document.querySelector(`#is_rows .ppc-conf-btn[data-i="${i}"]`);
   if(!btn) return;
