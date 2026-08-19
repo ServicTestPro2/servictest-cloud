@@ -1160,6 +1160,15 @@ function riCombos(nivel,modoMassa,modoFF){
   return out;
 }
 function riLeituraVazia(dur){return RI_DUR[dur].times.reduce((o,t)=>(o[t]='',o),{});}
+/* Nome da combinação: preenchido automaticamente pela seleção de Nível/Fase→massa/
+   Fase→fase, mas pode ser sobrescrito manualmente por linha (s.labels[i]). */
+function riComboLabel(s,i,c){ const v=s&&s.labels&&s.labels[i]; return (v!=null&&v!=='')?v:c; }
+function riColetaLabels(){
+  const combos=window._riCombos||[];
+  const labels={};
+  combos.forEach((c,i)=>{ const el=document.querySelector(`.ri_combo_lbl[data-i="${i}"]`); const v=el?el.value.trim():''; if(v && v!==c) labels[i]=v; });
+  return labels;
+}
 /* Seletor de unidade por leitura — cada célula pode vir em kΩ/MΩ/GΩ/TΩ (megôhmetro pode mudar de faixa durante o mesmo ensaio) */
 function riUnitSelectHTML(i,t,u){
   return `<select class="ri_unit" data-c="${i}" data-t="${t}" style="width:100%;min-width:44px;font-size:10px;padding:1px 2px;margin-top:2px" title="Unidade da leitura">${['K','M','G','T'].map(x=>`<option value="${x}" ${(u||'M')===x?'selected':''}>${x}Ω</option>`).join('')}</select>`;
@@ -1178,12 +1187,13 @@ function riCritTxt(crit,kv){
 }
 function renderRI(){
   const def={tensao:'5000',dur:'pi',temp:CAD.temp,tref:'0',tipoEq:'',tensaoNom:CAD.tensaoNom||'',crit:'kvrule',
-    nivel:'media',modoMassa:true,modoFF:false,leituras:{},unidades:{}};
+    nivel:'media',modoMassa:true,modoFF:false,leituras:{},unidades:{},labels:{}};
   const s=E('ri',def);
   ['dur','tref','crit','nivel'].forEach(k=>{if(!s[k])s[k]=def[k];});
   if(s.modoMassa===undefined)s.modoMassa=true; if(s.modoFF===undefined)s.modoFF=false;
   if(!s.leituras)s.leituras={};
   if(!s.unidades)s.unidades={};
+  if(!s.labels)s.labels={};
   const kvNom=num(s.tensaoNom!==''?s.tensaoNom:CAD.tensaoNom);
   const minAuto=riMinValor(s.crit,kvNom,s.minMOhm); const isMan=s.crit==='man';
   const combos=riCombos(s.nivel,s.modoMassa,s.modoFF);
@@ -1245,7 +1255,7 @@ function renderRI(){
       ? `<div class="hint" style="margin-bottom:6px">Valores <b>medidos</b> (sem correção de temperatura, com unidade kΩ/MΩ/GΩ/TΩ por leitura). Use o seletor "Temperatura de Correção" para corrigir a 20 °C. <b>Qualquer leitura em kΩ reprova o ensaio imediatamente.</b></div>
     <div style="overflow-x:auto">
     <table><thead><tr><th>Combinação</th>${times.map(t=>`<th>${t}</th>`).join('')}</tr></thead>
-    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:70px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap"><input class="ri_combo_lbl" data-i="${i}" value="${riComboLabel(s,i,c)}" style="font-weight:600;min-width:150px;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 4px" title="Preenchido automaticamente pela seleção de Nível/Combinações — clique para editar manualmente"></td>${times.map(t=>`<td><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:70px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`
       : `<div class="hint" style="margin-bottom:6px">Em cada tempo: <b>Lido</b> (valor medido, editável, com unidade kΩ/MΩ/GΩ/TΩ) e <b>Corr.</b> (corrigido para ${s.tref}°C pela IEEE 43, preenchido ao Calcular). <b>Qualquer leitura em kΩ reprova o ensaio imediatamente.</b></div>
     <div style="overflow-x:auto">
@@ -1253,7 +1263,7 @@ function renderRI(){
       <tr><th rowspan="2" style="vertical-align:middle">Combinação</th>${times.map(t=>`<th colspan="2" style="text-align:center">${t}</th>`).join('')}</tr>
       <tr>${times.map(()=>`<th style="font-size:9px;text-align:center">Lido</th><th style="font-size:9px;text-align:center;background:var(--muted-bg)">Corr. ${s.tref}°</th>`).join('')}</tr>
     </thead>
-    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap">${c}</td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:var(--muted-bg2);color:var(--blue);font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <tbody>${combos.map((c,i)=>`<tr><td style="font-weight:600;white-space:nowrap"><input class="ri_combo_lbl" data-i="${i}" value="${riComboLabel(s,i,c)}" style="font-weight:600;min-width:150px;border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 4px" title="Preenchido automaticamente pela seleção de Nível/Combinações — clique para editar manualmente"></td>${times.map(t=>`<td style="padding:2px"><input class="ri_cell" data-c="${i}" data-t="${t}" value="${s.leituras[c][t]||''}" style="min-width:58px">${riUnitSelectHTML(i,t,s.unidades[c][t])}</td><td class="ri_corr" data-c="${i}" data-t="${t}" style="text-align:center;background:var(--muted-bg2);color:var(--blue);font-weight:600;min-width:54px">—</td>`).join('')}</tr>`).join('')}</tbody></table>
     </div>`}
     <div class="btn-row"><button class="btn btn-p" onclick="calcRI()">⚙ Calcular</button></div>
   </div>
@@ -1281,6 +1291,7 @@ function riSalvaEstado(extra){
   s.modoMassa=$('#ri_mm').checked; s.modoFF=$('#ri_ff').checked;
   s.leituras=riColeta();
   s.unidades=riColetaUnidades();
+  s.labels=riColetaLabels();
   Object.assign(s,extra||{});
   saveE('ri',s); return s;
 }
@@ -1303,7 +1314,7 @@ function updRiMin(){
 function calcRI(){
   const temp=num($('#ri_temp').value), tref=num($('#ri_tref').value), dur=$('#ri_dur').value;
   const min=num($('#ri_min').value), kvNom=num($('#ri_kv').value), crit=$('#ri_crit').value, tensao=$('#ri_tensao').value;
-  riSalvaEstado(); const leituras=riColeta(); const unidades=riColetaUnidades(); const combos=window._riCombos||[];
+  const s=riSalvaEstado(); const leituras=riColeta(); const unidades=riColetaUnidades(); const combos=window._riCombos||[];
   const semCorr=(tref==null||tref===0);
   // 0 MΩ não é uma leitura plausível de megôhmetro — trata como campo não
   // preenchido (não entra no cálculo, não reprova nem aprova por engano).
@@ -1313,7 +1324,7 @@ function calcRI(){
     const cell=document.querySelector(`.ri_corr[data-c="${i}"][data-t="${t}"]`);
     if(cell){const v=gv(leituras[c][t],unidades[c][t]);const cv=semCorr?v:corrigeTemp(v,temp,tref);cell.textContent=cv!=null?fmt(cv,2):'—';}
   }));
-  const linhas=combos.map(c=>{
+  const linhas=combos.map((c,ci)=>{
     const L=leituras[c],U=unidades[c],g=t=>gv(L[t],U[t]);
     const r30=g('30s'),r60=g('60s'),r10=g('10min');
     const PI=(r10!=null&&r60!=null&&r60!==0)?r10/r60:null;
@@ -1330,11 +1341,11 @@ function calcRI(){
     const sDAR=DAR==null?'INCONCLUSIVO':'INFORMATIVO';
     const arr=[sMin,sPI].filter(x=>x==='APROVADO'||x==='REPROVADO');
     const st=temKohm?'REPROVADO':(arr.includes('REPROVADO')?'REPROVADO':arr.length?'APROVADO':'INCONCLUSIVO');
-    return {c,PI,DAR,r1:r60,medido:r60,ricorr:r1corr,sPI,sDAR,sMin,st,temKohm};
+    return {c:riComboLabel(s,ci,c),PI,DAR,r1:r60,medido:r60,ricorr:r1corr,sPI,sDAR,sMin,st,temKohm};
   }).filter(x=>x.r1!=null||x.PI!=null||x.DAR!=null||x.temKohm);
   const sts=linhas.map(l=>l.st);const status=!linhas.length?'INCONCLUSIVO':sts.includes('REPROVADO')?'REPROVADO':sts.every(x=>x==='APROVADO')?'APROVADO':'INCONCLUSIVO';
   const critTxt=riCritTxt(crit,kvNom);const timesArr=RI_DUR[dur].times;
-  const leiturasMatriz=combos.map(c=>({c,vals:timesArr.map(t=>{const v=gv(leituras[c][t],unidades[c][t]);return {t,medido:v,corr:semCorr?v:corrigeTemp(v,temp,tref)};})}));
+  const leiturasMatriz=combos.map((c,ci)=>({c:riComboLabel(s,ci,c),vals:timesArr.map(t=>{const v=gv(leituras[c][t],unidades[c][t]);return {t,medido:v,corr:semCorr?v:corrigeTemp(v,temp,tref)};})}));
   const colCorr=semCorr?'':`<th>RI corr. ${tref}°C</th>`;
   $('#ri_out').innerHTML=`<h3>Resultado do Ensaio</h3><div style="margin:14px 0">${pill(status)}</div>
     <div style="overflow-x:auto"><table><thead><tr><th>Combinação</th><th>PI</th><th>DAR</th><th>R1 medido</th>${colCorr}<th>IR mínima</th><th>Situação</th></tr></thead><tbody>
@@ -1344,7 +1355,7 @@ function calcRI(){
     <div class="chart-wrap"><canvas id="ri_chart"></canvas></div>
     <div class="btn-row">${prepLaudoBtn("Resistência de Isolamento","ri",{status,tref,semCorr,tipoEq:($('#ri_tipoEq')?$('#ri_tipoEq').value:''),tensao,temp,min,kvNom,crit,critTxt,times:timesArr,leiturasMatriz,linhas:linhas.map(l=>({c:l.c,PI:l.PI,DAR:l.DAR,medido:l.medido,ricorr:l.ricorr,st:l.st}))})}</div>`;
   const times=timesArr;
-  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:c,data:times.map(t=>riConverteMOhm(leituras[c][t],unidades[c][t])),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'][k%6],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Resistência de Isolamento'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
+  drawChart('ri_chart',{type:'line',data:{labels:times,datasets:combos.map((c,k)=>({label:riComboLabel(s,k,c),data:times.map(t=>riConverteMOhm(leituras[c][t],unidades[c][t])),borderColor:['#1E4FD8','#0d8a4f','#b8860b','#c52b2b','#7b3ff2','#1196a8'][k%6],backgroundColor:'transparent',tension:.3,pointRadius:3})).filter(ds=>ds.data.some(v=>v!=null))},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:'Curva de Resistência de Isolamento'}},scales:{y:{title:{display:true,text:'MΩ'}}}}});
 }
 
 function roFasesPadrao(nivel){
