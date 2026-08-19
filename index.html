@@ -527,6 +527,7 @@ async function sbPullState(){
 }
 async function sbFullSync(){
   if(SB.busy) return;
+  if(!navigator.onLine) throw new Error('Sem conexão com a internet — os dados continuam salvos neste dispositivo.');
   const c=sbPersistCfg();
   if(!c.url||!c.anonKey) throw new Error('Informe a Project URL e a Anon Key do Supabase.');
   const session=await sbSession();
@@ -547,17 +548,27 @@ function scheduleSupabaseSyncST(){
   sbSetStatus('Alterações não salvas...','var(--warn)');
   clearTimeout(SB.timer);
   SB.timer=setTimeout(()=>{
+    if(!navigator.onLine){ sbSetStatus('Offline — salvo neste dispositivo','var(--fail)'); return; }
     sbSession().then(session=>{
       if(!session){ sbSetStatus('Não conectado','var(--fail)'); return; }
       SB.busy=true;
       sbSetStatus('Salvando na nuvem...','var(--warn)');
       return sbPushState()
         .then(()=>{ DB.set('sb_last_sync', new Date().toISOString()); sbSetStatus('Salvo ✓ '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),'var(--ok)'); })
-        .catch(e=>{ sbSetStatus('Não sincronizado','var(--fail)'); throw e; })
+        .catch(e=>{ sbSetStatus(navigator.onLine?'Não sincronizado':'Offline — salvo neste dispositivo','var(--fail)'); throw e; })
         .finally(()=>{SB.busy=false;});
     }).catch(e=>console.warn('Falha na sincronização automática:',e&&e.message));
   },2500);
 }
+// Assim que a conexão voltar, tenta sincronizar sozinho (sem esperar a
+// próxima edição do usuário para reagendar o push).
+window.addEventListener('online', ()=>{
+  sbSetStatus('Conexão restabelecida — sincronizando...','var(--warn)');
+  sbFullSync().catch(e=>{ console.warn('Falha ao sincronizar após reconectar:',e&&e.message); sbSetStatus('Não sincronizado','var(--fail)'); });
+});
+window.addEventListener('offline', ()=>{
+  sbSetStatus('Offline — trabalhando localmente','var(--fail)');
+});
 function syncSupabaseST(){
   sbFullSync().then(()=>alert('☁️ Sincronização concluída.')).catch(e=>{ sbSetStatus('Não conectado','var(--fail)'); alert('❌ '+e.message); });
 }
